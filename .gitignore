@@ -1,0 +1,32 @@
+# Java
+**/target/
+**/.classpath
+**/.project
+**/.settings/
+
+# Node
+**/node_modules/
+**/dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+hs_err_pid*
+replay_pid*
+
+# Environment
+**/.env
+**/.env.local
+
+# Backend local configuration
+backend/src/main/resources/application-local.properties
+
+# Uploads
+backend/uploads/
+
+# OS
+.DS_Store
+Thumbs.db

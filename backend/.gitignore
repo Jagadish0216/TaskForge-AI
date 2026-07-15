@@ -1,0 +1,32 @@
+# Maven
+target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VS Code / Antigravity
+.vscode/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+
+# Maven Wrapper JAR (keep properties)
+!.mvn/wrapper/maven-wrapper.properties
+
+.factorypath
+
+# Local configuration
+src/main/resources/application-local.properties
+
+# Eclipse / STS
+.settings/
+.classpath
+.project
