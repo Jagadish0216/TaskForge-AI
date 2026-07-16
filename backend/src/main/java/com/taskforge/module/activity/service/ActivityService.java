@@ -124,6 +124,10 @@ public class ActivityService {
      */
     @Transactional(readOnly = true)
     public ActivityPageResponse getProjectActivityTimeline(Long projectId, Pageable pageable) {
+        if (projectId == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
@@ -144,6 +148,10 @@ public class ActivityService {
      */
     @Transactional(readOnly = true)
     public ActivityPageResponse getUserActivityTimeline(Long userId, Pageable pageable) {
+        if (userId == null) {
+            throw new ResourceNotFoundException("User ID must not be null");
+        }
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 

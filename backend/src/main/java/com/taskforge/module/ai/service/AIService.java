@@ -6,7 +6,10 @@ import com.taskforge.common.constant.ProjectStatus;
 import com.taskforge.common.constant.ProjectVisibility;
 import com.taskforge.common.constant.TaskPriority;
 import com.taskforge.common.constant.TaskStatus;
+import com.taskforge.common.exception.InvalidStateException;
+import com.taskforge.common.exception.ResourceNotFoundException;
 import com.taskforge.module.activity.service.ActivityService;
+import com.taskforge.module.ai.constant.AIIntent;
 import com.taskforge.module.ai.dto.*;
 import com.taskforge.module.ai.util.PromptBuilder;
 import com.taskforge.module.project.dto.ProjectCreateRequest;
@@ -14,16 +17,19 @@ import com.taskforge.module.project.dto.ProjectResponse;
 import com.taskforge.module.project.entity.Project;
 import com.taskforge.module.project.repository.ProjectRepository;
 import com.taskforge.module.project.service.ProjectService;
-import com.taskforge.module.task.dto.TaskCreateRequest;
 import com.taskforge.module.task.entity.Task;
 import com.taskforge.module.task.repository.TaskRepository;
 import com.taskforge.module.task.service.TaskService;
+import com.taskforge.module.user.entity.User;
+import com.taskforge.module.user.repository.UserRepository;
+import com.taskforge.security.SecurityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -31,13 +37,25 @@ public class AIService {
 
     private static final Logger log = LoggerFactory.getLogger(AIService.class);
 
+    private static final List<String> FORBIDDEN_NEW_PROJECT_TERMS = List.of(
+            "workspace",
+            "current project",
+            "active project",
+            "existing project",
+            "taskforge",
+            "tfec",
+            "database context"
+    );
+
     private final GeminiProvider geminiProvider;
     private final ProjectService projectService;
     private final ProjectRepository projectRepository;
     private final TaskService taskService;
     private final TaskRepository taskRepository;
+    private final UserRepository userRepository;
     private final ActivityService activityService;
     private final ObjectMapper objectMapper;
+    private final IntentDetector intentDetector;
 
     public AIService(
             GeminiProvider geminiProvider,
@@ -45,16 +63,20 @@ public class AIService {
             ProjectRepository projectRepository,
             TaskService taskService,
             TaskRepository taskRepository,
+            UserRepository userRepository,
             ActivityService activityService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            IntentDetector intentDetector
     ) {
         this.geminiProvider = geminiProvider;
         this.projectService = projectService;
         this.projectRepository = projectRepository;
         this.taskService = taskService;
         this.taskRepository = taskRepository;
+        this.userRepository = userRepository;
         this.activityService = activityService;
         this.objectMapper = objectMapper;
+        this.intentDetector = intentDetector;
     }
 
     /**
@@ -63,6 +85,11 @@ public class AIService {
     @Transactional
     public ProjectResponse generateAndPersistProject(GenerateProjectRequest request) {
         String prompt = PromptBuilder.buildGenerateProjectPrompt(request.prompt());
+
+        log.info("\n================ GEMINI NEW PROJECT PROMPT ================\n{}\n===========================================================", prompt);
+
+        validateNewProjectPrompt(prompt);
+
         String jsonText = geminiProvider.generateJson(prompt);
 
         GeneratedProjectDTO dto;
@@ -92,12 +119,34 @@ public class AIService {
                 LocalDate.now().plusMonths(3)
         );
 
+        // 1. Save Project entity first
         ProjectResponse projectResponse = projectService.createProject(projectCreateRequest);
+        Long projectId = projectResponse.id();
+        if (projectId == null) {
+            throw new InvalidStateException("Saved project ID cannot be null");
+        }
+
+        // Retrieve saved Project entity directly
+        Project savedProject = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Saved project not found with id: " + projectId));
+
+        // Obtain default user / owner for task assignment if needed
+        User defaultUser = null;
+        String currentUserEmail = SecurityUtils.getCurrentUserUsername().orElse(null);
+        if (currentUserEmail != null) {
+            defaultUser = userRepository.findByEmail(currentUserEmail).orElse(null);
+        }
+        if (defaultUser == null) {
+            defaultUser = savedProject.getOwner();
+        }
+
+        List<String> failedTasks = new ArrayList<>();
 
         if (dto.modules() != null) {
             for (GeneratedProjectDTO.ModuleDTO mod : dto.modules()) {
                 if (mod.tasks() != null) {
                     for (GeneratedProjectDTO.TaskDTO t : mod.tasks()) {
+                        String title = t.title() != null ? t.title() : "AI Task";
                         TaskPriority priority = TaskPriority.HIGH;
                         if (t.priority() != null) {
                             try {
@@ -105,39 +154,80 @@ public class AIService {
                             } catch (Exception ignored) {}
                         }
 
-                        TaskCreateRequest taskCreateRequest = new TaskCreateRequest(
-                                t.title() != null ? t.title() : "AI Task",
-                                (mod.name() != null ? "[" + mod.name() + "] " : "") + (t.description() != null ? t.description() : ""),
-                                TaskStatus.TODO,
-                                priority,
-                                projectResponse.id(),
-                                null,
-                                LocalDate.now(),
-                                LocalDate.now().plusWeeks(2),
-                                t.estimatedHours() != null ? t.estimatedHours() : 8
-                        );
+                        // Log task details before saving
+                        log.info("Task:\nTitle: {}\nPriority: {}\nStatus: {}\nProjectId: {}\nAssigneeId: {}",
+                                title, priority, TaskStatus.TODO, savedProject.getId(), (defaultUser != null ? defaultUser.getId() : "null"));
+
+                        Task task = Task.builder()
+                                .title(title)
+                                .description((mod.name() != null ? "[" + mod.name() + "] " : "") + (t.description() != null ? t.description() : ""))
+                                .status(TaskStatus.TODO)
+                                .priority(priority)
+                                .project(savedProject)
+                                .assignee(defaultUser)
+                                .startDate(LocalDate.now())
+                                .dueDate(LocalDate.now().plusWeeks(2))
+                                .estimatedHours(t.estimatedHours() != null ? t.estimatedHours() : 8)
+                                .build();
+
                         try {
-                            taskService.createTask(taskCreateRequest);
+                            taskRepository.save(task);
                         } catch (Exception ex) {
-                            log.warn("Failed to create task '{}' for project ID {}: {}", t.title(), projectResponse.id(), ex.getMessage());
+                            log.error("Failed to save task '{}' for project ID {}: {}", title, savedProject.getId(), ex.getMessage(), ex);
+                            failedTasks.add(title);
                         }
                     }
                 }
             }
         }
 
+        if (!failedTasks.isEmpty()) {
+            log.warn("Project '{}' generated with {} failed tasks: {}", savedProject.getName(), failedTasks.size(), failedTasks);
+        }
+
         return projectResponse;
     }
 
     /**
-     * FEATURE 2: Context-Aware AI Chat
+     * FEATURE 2: Context-Aware & Intent-Guided AI Chat
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public AIResponse chat(ChatRequest request) {
-        String dbContext = buildProjectDbContext(request.projectId());
-        String prompt = PromptBuilder.buildProjectChatPrompt(request.message(), dbContext);
-        String response = geminiProvider.generateResponse(prompt);
-        return new AIResponse(response);
+        AIIntent intent = intentDetector.detectIntent(request.message());
+        log.info("Detected intent for user prompt standard chat: {}", intent);
+
+        switch (intent) {
+            case NEW_PROJECT -> {
+                // DO NOT load current active project or workspace context
+                log.info("Rerouting prompt to NEW_PROJECT flow without active workspace context");
+                ProjectResponse createdProject = generateAndPersistProject(new GenerateProjectRequest(request.message()));
+                String replyMessage = String.format(
+                        "Successfully generated and created a new project **%s** (Key: `%s`) in the database with modules and tasks.\n\nDescription: %s",
+                        createdProject.name(),
+                        createdProject.projectKey(),
+                        createdProject.description()
+                );
+                return new AIResponse(replyMessage);
+            }
+            case PROJECT_CHAT -> {
+                // Load active project database context
+                String dbContext = buildProjectDbContext(request.projectId());
+                String prompt = PromptBuilder.buildProjectChatPrompt(request.message(), dbContext);
+                String response = geminiProvider.generateResponse(prompt);
+                return new AIResponse(response);
+            }
+            case GENERAL_CHAT -> {
+                // Send directly to Gemini WITHOUT loading any database context
+                String prompt = PromptBuilder.buildGeneralChatPrompt(request.message());
+                String response = geminiProvider.generateResponse(prompt);
+                return new AIResponse(response);
+            }
+            default -> {
+                String prompt = PromptBuilder.buildGeneralChatPrompt(request.message());
+                String response = geminiProvider.generateResponse(prompt);
+                return new AIResponse(response);
+            }
+        }
     }
 
     /**
@@ -171,6 +261,21 @@ public class AIService {
         String prompt = PromptBuilder.buildDocumentationPrompt(request.docType(), dbContext);
         String markdownResponse = geminiProvider.generateResponse(prompt);
         return new AIResponse(markdownResponse);
+    }
+
+    private void validateNewProjectPrompt(String prompt) {
+        if (prompt == null || prompt.isBlank()) {
+            throw new IllegalStateException("NEW_PROJECT prompt cannot be null or blank");
+        }
+        String lowerPrompt = prompt.toLowerCase();
+        for (String forbidden : FORBIDDEN_NEW_PROJECT_TERMS) {
+            if (lowerPrompt.contains(forbidden)) {
+                throw new IllegalStateException(
+                        "NEW_PROJECT prompt contains forbidden workspace term '" + forbidden +
+                        "'. NEW_PROJECT prompts must be completely isolated."
+                );
+            }
+        }
     }
 
     private String buildProjectDbContext(Long projectId) {

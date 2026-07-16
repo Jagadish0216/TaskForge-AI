@@ -62,6 +62,10 @@ public class CommentService {
 
     @Transactional
     public CommentResponse createComment(CommentCreateRequest request) {
+        if (request.taskId() == null) {
+            throw new InvalidStateException("Task ID must not be null");
+        }
+
         Task task = taskRepository.findById(request.taskId())
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + request.taskId()));
 
@@ -87,7 +91,6 @@ public class CommentService {
 
         Comment savedComment = commentRepository.save(comment);
 
-        // Record Activity
         activityService.recordActivity(
                 ActivityType.COMMENT_ADDED,
                 "Comment added by " + author.getEmail() + " on task: " + task.getTitle(),
@@ -95,10 +98,8 @@ public class CommentService {
                 task
         );
 
-        // Parse Mentions
         parseAndNotifyMentions(request.content(), author, task);
 
-        // Notify Assignee
         if (task.getAssignee() != null && !task.getAssignee().getId().equals(author.getId())) {
             notificationService.createNotification(
                     task.getAssignee(),
@@ -113,6 +114,10 @@ public class CommentService {
 
     @Transactional
     public CommentResponse updateComment(Long id, CommentUpdateRequest request) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Comment ID must not be null");
+        }
+
         Comment comment = commentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + id));
 
@@ -125,7 +130,6 @@ public class CommentService {
             throw new UnauthorizedAccessException("You can only edit comments you authored");
         }
 
-        // Save History
         CommentHistory history = CommentHistory.builder()
                 .comment(comment)
                 .oldContent(comment.getContent())
@@ -143,6 +147,10 @@ public class CommentService {
 
     @Transactional
     public void deleteComment(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Comment ID must not be null");
+        }
+
         Comment comment = commentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + id));
 
@@ -154,7 +162,6 @@ public class CommentService {
             throw new UnauthorizedAccessException("You do not have permission to delete this comment");
         }
 
-        // Soft delete
         comment.setDeleted(true);
         commentRepository.save(comment);
     }
@@ -174,7 +181,6 @@ public class CommentService {
             comments = commentRepository.findAll();
         }
 
-        // Filter keyword locally to keep logic simple and SOLID
         if (StringUtils.hasText(searchRequest.keyword())) {
             String keyword = searchRequest.keyword().toLowerCase();
             comments = comments.stream()
@@ -196,6 +202,10 @@ public class CommentService {
 
     @Transactional(readOnly = true)
     public List<com.taskforge.module.task.dto.CommentHistoryResponse> getCommentHistory(Long commentId) {
+        if (commentId == null) {
+            throw new ResourceNotFoundException("Comment ID must not be null");
+        }
+
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
         List<CommentHistory> history = commentHistoryRepository.findByCommentOrderByEditedAtDesc(comment);

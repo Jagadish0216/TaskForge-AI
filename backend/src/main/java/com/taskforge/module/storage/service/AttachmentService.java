@@ -70,7 +70,6 @@ public class AttachmentService {
 
         User uploader = getCurrentAuthenticatedUser(project);
 
-        // Store file
         String uniqueName = storageService.store(file);
 
         Attachment attachment = Attachment.builder()
@@ -85,7 +84,6 @@ public class AttachmentService {
 
         Attachment savedAttachment = attachmentRepository.save(attachment);
 
-        // Log activity
         activityService.recordActivity(
                 ActivityType.ATTACHMENT_UPLOADED,
                 "Attachment uploaded: " + file.getOriginalFilename() + (task != null ? " on task: " + task.getTitle() : ""),
@@ -98,6 +96,10 @@ public class AttachmentService {
 
     @Transactional(readOnly = true)
     public Resource downloadAttachmentFile(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Attachment ID must not be null");
+        }
+
         Attachment attachment = attachmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment not found with id: " + id));
         return storageService.loadAsResource(attachment.getFilePath());
@@ -105,6 +107,10 @@ public class AttachmentService {
 
     @Transactional(readOnly = true)
     public AttachmentResponse getAttachmentMetadata(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Attachment ID must not be null");
+        }
+
         Attachment attachment = attachmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment not found with id: " + id));
         return attachmentMapper.toResponse(attachment);
@@ -112,18 +118,24 @@ public class AttachmentService {
 
     @Transactional
     public void deleteAttachment(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Attachment ID must not be null");
+        }
+
         Attachment attachment = attachmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment not found with id: " + id));
 
-        // Delete from local storage
         storageService.delete(attachment.getFilePath());
 
-        // Delete from database
         attachmentRepository.delete(attachment);
     }
 
     @Transactional(readOnly = true)
     public List<AttachmentResponse> getAttachmentsByTask(Long taskId) {
+        if (taskId == null) {
+            throw new ResourceNotFoundException("Task ID must not be null");
+        }
+
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + taskId));
         List<Attachment> list = attachmentRepository.findByTask(task);
@@ -132,6 +144,10 @@ public class AttachmentService {
 
     @Transactional(readOnly = true)
     public List<AttachmentResponse> getAttachmentsByProject(Long projectId) {
+        if (projectId == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
         List<Attachment> list = attachmentRepository.findByProject(project);

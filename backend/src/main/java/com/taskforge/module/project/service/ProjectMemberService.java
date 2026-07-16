@@ -64,6 +64,10 @@ public class ProjectMemberService {
      */
     @Transactional
     public ProjectInvitationResponse inviteMember(Long projectId, ProjectMemberInviteRequest request) {
+        if (projectId == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
@@ -109,6 +113,10 @@ public class ProjectMemberService {
      */
     @Transactional
     public ProjectInvitationResponse acceptInvitation(Long invitationId) {
+        if (invitationId == null) {
+            throw new ResourceNotFoundException("Invitation ID must not be null");
+        }
+
         ProjectInvitation invitation = projectInvitationRepository.findById(invitationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invitation not found with id: " + invitationId));
 
@@ -124,7 +132,6 @@ public class ProjectMemberService {
         invitation.setStatus(InvitationStatus.ACCEPTED);
         projectInvitationRepository.save(invitation);
 
-        // Add member if not already exists
         if (!projectMemberRepository.existsByProjectAndUser(invitation.getProject(), currentUser)) {
             ProjectMember member = ProjectMember.builder()
                     .project(invitation.getProject())
@@ -152,6 +159,10 @@ public class ProjectMemberService {
      */
     @Transactional
     public ProjectInvitationResponse rejectInvitation(Long invitationId) {
+        if (invitationId == null) {
+            throw new ResourceNotFoundException("Invitation ID must not be null");
+        }
+
         ProjectInvitation invitation = projectInvitationRepository.findById(invitationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invitation not found with id: " + invitationId));
 
@@ -179,6 +190,10 @@ public class ProjectMemberService {
      */
     @Transactional(readOnly = true)
     public ProjectMemberPageResponse listProjectMembers(Long projectId, Pageable pageable) {
+        if (projectId == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
@@ -210,6 +225,13 @@ public class ProjectMemberService {
      */
     @Transactional(readOnly = true)
     public ProjectMemberResponse getMemberDetails(Long projectId, Long memberId) {
+        if (projectId == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+        if (memberId == null) {
+            throw new ResourceNotFoundException("Member ID must not be null");
+        }
+
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
@@ -234,6 +256,13 @@ public class ProjectMemberService {
      */
     @Transactional
     public void removeMember(Long projectId, Long memberId) {
+        if (projectId == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+        if (memberId == null) {
+            throw new ResourceNotFoundException("Member ID must not be null");
+        }
+
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
@@ -268,6 +297,10 @@ public class ProjectMemberService {
      */
     @Transactional
     public void leaveProject(Long projectId) {
+        if (projectId == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
@@ -292,6 +325,13 @@ public class ProjectMemberService {
      */
     @Transactional
     public ProjectMemberResponse updateMemberRole(Long projectId, Long memberId, ProjectMemberUpdateRequest request) {
+        if (projectId == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+        if (memberId == null) {
+            throw new ResourceNotFoundException("Member ID must not be null");
+        }
+
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
@@ -327,6 +367,13 @@ public class ProjectMemberService {
      */
     @Transactional
     public ProjectMemberResponse transferOwnership(Long projectId, Long targetMemberId) {
+        if (projectId == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+        if (targetMemberId == null) {
+            throw new ResourceNotFoundException("Target member ID must not be null");
+        }
+
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
@@ -348,17 +395,14 @@ public class ProjectMemberService {
             throw new InvalidStateException("User is already the project OWNER");
         }
 
-        // Downgrade old owner to MANAGER
         ProjectMember currentOwnerMember = projectMemberRepository.findByProjectAndUser(project, project.getOwner())
                 .orElseThrow(() -> new ResourceNotFoundException("Current Owner member record not found"));
         currentOwnerMember.setRole(ProjectMemberRole.MANAGER);
         projectMemberRepository.save(currentOwnerMember);
 
-        // Upgrade target member to OWNER
         targetMember.setRole(ProjectMemberRole.OWNER);
         ProjectMember newOwnerMember = projectMemberRepository.save(targetMember);
 
-        // Update Project Owner
         project.setOwner(targetMember.getUser());
         projectRepository.save(project);
 
@@ -441,7 +485,6 @@ public class ProjectMemberService {
         }
 
         if (currentMember.getRole() == ProjectMemberRole.MANAGER) {
-            // Manager cannot remove/modify another Manager or the Owner
             if (targetMember.getRole() == ProjectMemberRole.OWNER || targetMember.getRole() == ProjectMemberRole.MANAGER) {
                 throw new UnauthorizedAccessException("Managers can only manage roles for Team Members and Viewers");
             }

@@ -101,6 +101,10 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public UserResponse getUserById(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("User ID must not be null");
+        }
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
         return userMapper.toResponse(user);
@@ -131,7 +135,6 @@ public class UserService {
         Specification<User> spec = (root, query, cb) -> {
             var predicates = new ArrayList<jakarta.persistence.criteria.Predicate>();
 
-            // Default: exclude deleted users unless explicitly requested
             boolean searchDeleted = searchRequest.deleted() != null && searchRequest.deleted();
             predicates.add(cb.equal(root.get("deleted"), searchDeleted));
 
@@ -180,6 +183,10 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public UserStatisticsResponse getUserStatistics(Long userId) {
+        if (userId == null) {
+            throw new ResourceNotFoundException("User ID must not be null");
+        }
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
@@ -205,6 +212,10 @@ public class UserService {
      */
     @Transactional
     public void softDeleteUser(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("User ID must not be null");
+        }
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
         user.setDeleted(true);
@@ -219,6 +230,10 @@ public class UserService {
      */
     @Transactional
     public void activateUser(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("User ID must not be null");
+        }
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
         user.setEnabled(true);
@@ -232,6 +247,10 @@ public class UserService {
      */
     @Transactional
     public void deactivateUser(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("User ID must not be null");
+        }
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
         user.setEnabled(false);

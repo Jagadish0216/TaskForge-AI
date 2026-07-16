@@ -5,7 +5,7 @@ public class PromptBuilder {
     public static String buildGenerateProjectPrompt(String promptText) {
         return """
             You are an expert software project manager and system architect.
-            The user wants to generate a complete, real project structure for: "%s".
+            The user wants to generate a complete software project structure for: "%s".
             
             Return strictly valid JSON matching this exact JSON schema:
             {
@@ -51,6 +51,17 @@ public class PromptBuilder {
             - Answer the user concisely based on the real workspace data provided above.
             - If details are missing from context, answer based on best project management practices while noting current database metrics.
             """.formatted(projectContext, userMessage);
+    }
+
+    public static String buildGeneralChatPrompt(String userMessage) {
+        return """
+            You are an intelligent software engineering and project management assistant.
+            
+            User Question: %s
+
+            Instructions:
+            - Answer the user's question directly, clearly, and concisely.
+            """.formatted(userMessage);
     }
 
     public static String buildSprintPlanPrompt(String projectContext, String sprintGoal) {

@@ -118,6 +118,10 @@ public class ProjectService {
      */
     @Transactional(readOnly = true)
     public ProjectResponse getProjectById(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + id));
 
@@ -156,7 +160,6 @@ public class ProjectService {
         Specification<Project> spec = (root, query, cb) -> {
             var predicates = new ArrayList<jakarta.persistence.criteria.Predicate>();
 
-            // Default: exclude archived projects unless explicitly requested
             boolean searchArchived = searchRequest.archived() != null && searchRequest.archived();
             predicates.add(cb.equal(root.get("archived"), searchArchived));
 
@@ -185,7 +188,6 @@ public class ProjectService {
                 predicates.add(keywordPredicate);
             }
 
-            // Access control: Team members can ONLY search/see projects where they are members
             if (isTeamMember) {
                 Subquery<Long> subquery = query.subquery(Long.class);
                 Root<ProjectMember> pmRoot = subquery.from(ProjectMember.class);
@@ -221,6 +223,10 @@ public class ProjectService {
      */
     @Transactional
     public ProjectResponse updateProject(Long id, ProjectUpdateRequest request) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + id));
 
@@ -253,6 +259,10 @@ public class ProjectService {
      */
     @Transactional
     public void archiveProject(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + id));
 
@@ -275,6 +285,10 @@ public class ProjectService {
      */
     @Transactional
     public void restoreProject(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + id));
 
@@ -297,28 +311,27 @@ public class ProjectService {
      */
     @Transactional
     public void deleteProject(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + id));
 
         verifyModificationAccess(project);
 
-        // 1. Delete activities
         List<com.taskforge.module.activity.entity.ActivityLog> activities = activityLogRepository.findByProject(project);
         activityLogRepository.deleteAll(activities);
 
-        // 2. Delete invitations
         List<com.taskforge.module.project.entity.ProjectInvitation> invitations = projectInvitationRepository.findByProject(project);
         projectInvitationRepository.deleteAll(invitations);
 
-        // 3. Delete members
         List<com.taskforge.module.project.entity.ProjectMember> members = projectMemberRepository.findByProject(project);
         projectMemberRepository.deleteAll(members);
 
-        // 4. Delete tasks (tasks have comments, comment history, and attachments)
         List<com.taskforge.module.task.entity.Task> tasks = taskRepository.findByProject(project);
         for (com.taskforge.module.task.entity.Task task : tasks) {
             List<com.taskforge.module.task.entity.Comment> comments = commentRepository.findByTask(task);
-            // 1. Delete replies (child comments) first
             for (com.taskforge.module.task.entity.Comment comment : comments) {
                 if (comment.getParentComment() != null) {
                     List<com.taskforge.module.task.entity.CommentHistory> history = commentHistoryRepository.findByCommentOrderByEditedAtDesc(comment);
@@ -326,7 +339,6 @@ public class ProjectService {
                     commentRepository.delete(comment);
                 }
             }
-            // 2. Delete parent comments second
             for (com.taskforge.module.task.entity.Comment comment : comments) {
                 if (comment.getParentComment() == null) {
                     List<com.taskforge.module.task.entity.CommentHistory> history = commentHistoryRepository.findByCommentOrderByEditedAtDesc(comment);
@@ -339,11 +351,9 @@ public class ProjectService {
             taskRepository.delete(task);
         }
 
-        // 5. Delete project-level attachments
         List<com.taskforge.module.storage.entity.Attachment> projAttachments = attachmentRepository.findByProject(project);
         attachmentRepository.deleteAll(projAttachments);
 
-        // 6. Delete project
         projectRepository.delete(project);
     }
 
@@ -355,6 +365,10 @@ public class ProjectService {
      */
     @Transactional(readOnly = true)
     public ProjectStatisticsResponse getProjectStatistics(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + id));
 
@@ -369,7 +383,6 @@ public class ProjectService {
         double progressPercentage = 0.0;
         if (totalTasks > 0) {
             progressPercentage = ((double) completedTasks / totalTasks) * 100.0;
-            // Round to 2 decimal places
             progressPercentage = Math.round(progressPercentage * 100.0) / 100.0;
         }
 
@@ -403,7 +416,6 @@ public class ProjectService {
     private void verifyAccess(Project project) {
         User currentUser = getCurrentAuthenticatedUser(project);
 
-        // Admin and PM can view all projects. Team members can view only projects they belong to.
         boolean isTeamMember = currentUser.getRoles().stream()
                 .anyMatch(r -> r.getName() == UserRole.ROLE_TEAM_MEMBER);
 
@@ -422,11 +434,10 @@ public class ProjectService {
         boolean isPM = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_PROJECT_MANAGER);
 
         if (isAdmin) {
-            return; // Admins have full access
+            return;
         }
 
         if (isPM) {
-            // Project Managers can modify ONLY their own owned projects
             if (!project.getOwner().getId().equals(currentUser.getId())) {
                 throw new UnauthorizedAccessException("You can only modify projects you own");
             }

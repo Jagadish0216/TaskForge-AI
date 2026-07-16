@@ -75,6 +75,10 @@ public class TaskService {
      */
     @Transactional
     public TaskResponse createTask(TaskCreateRequest request) {
+        if (request.projectId() == null) {
+            throw new InvalidStateException("Project ID must not be null");
+        }
+
         Project project = projectRepository.findById(request.projectId())
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + request.projectId()));
 
@@ -128,6 +132,10 @@ public class TaskService {
      */
     @Transactional(readOnly = true)
     public TaskResponse getTaskById(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Task ID must not be null");
+        }
+
         Task task = taskRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
 
@@ -144,6 +152,10 @@ public class TaskService {
      */
     @Transactional
     public TaskResponse updateTask(Long id, TaskUpdateRequest request) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Task ID must not be null");
+        }
+
         Task task = taskRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
 
@@ -155,7 +167,6 @@ public class TaskService {
         User oldAssignee = task.getAssignee();
 
         if (isTeamMember) {
-            // Team members can ONLY update status and actualHours of their assigned tasks
             if (task.getAssignee() == null || !task.getAssignee().getId().equals(currentUser.getId())) {
                 throw new UnauthorizedAccessException("You can only update tasks assigned to you");
             }
@@ -165,7 +176,6 @@ public class TaskService {
                 task.setActualHours(request.actualHours());
             }
         } else {
-            // Admin and PM owning the project can update all fields
             verifyModificationAccess(task.getProject());
 
             task.setTitle(request.title());
@@ -194,7 +204,6 @@ public class TaskService {
 
         Task updatedTask = taskRepository.save(task);
 
-        // Record Activities based on changes
         if (updatedTask.getStatus() == TaskStatus.DONE && oldStatus != TaskStatus.DONE) {
             activityService.recordActivity(
                     com.taskforge.common.constant.ActivityType.TASK_COMPLETED,
@@ -240,12 +249,15 @@ public class TaskService {
      */
     @Transactional
     public void deleteTask(Long id) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Task ID must not be null");
+        }
+
         Task task = taskRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
 
         verifyModificationAccess(task.getProject());
 
-        // 1. Delete comments and comment histories (child comments first)
         List<com.taskforge.module.task.entity.Comment> comments = commentRepository.findByTask(task);
         for (com.taskforge.module.task.entity.Comment comment : comments) {
             if (comment.getParentComment() != null) {
@@ -262,11 +274,9 @@ public class TaskService {
             }
         }
 
-        // 2. Delete task attachments
         List<com.taskforge.module.storage.entity.Attachment> attachments = attachmentRepository.findByTask(task);
         attachmentRepository.deleteAll(attachments);
 
-        // 3. Nullify activity logs referencing this task
         List<com.taskforge.module.activity.entity.ActivityLog> logs = activityLogRepository.findByTask(task);
         for (com.taskforge.module.activity.entity.ActivityLog log : logs) {
             log.setTask(null);
@@ -292,6 +302,10 @@ public class TaskService {
      */
     @Transactional
     public TaskResponse assignUser(Long id, Long userId) {
+        if (id == null) {
+            throw new ResourceNotFoundException("Task ID must not be null");
+        }
+
         Task task = taskRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
 
@@ -376,7 +390,6 @@ public class TaskService {
                 predicates.add(keywordPredicate);
             }
 
-            // Access control: Team members can ONLY view tasks assigned to them
             if (isTeamMember) {
                 predicates.add(cb.equal(root.get("assignee").get("id"), currentUser.getId()));
             } else if (searchRequest.assigneeId() != null) {
@@ -468,11 +481,9 @@ public class TaskService {
             return userRepository.findByEmail(email)
                     .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
         }
-        // Fallback to project owner
         if (project != null && project.getOwner() != null) {
             return project.getOwner();
         }
-        // Fallback to first user in database
         return userRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
     }
@@ -483,7 +494,6 @@ public class TaskService {
                 .anyMatch(r -> r.getName() == UserRole.ROLE_TEAM_MEMBER);
 
         if (isTeamMember) {
-            // Team members can view only tasks assigned to them
             if (task.getAssignee() == null || !task.getAssignee().getId().equals(currentUser.getId())) {
                 throw new UnauthorizedAccessException("You do not have permission to view this task");
             }
