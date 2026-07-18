@@ -57,6 +57,10 @@ public class AuthenticationService {
             throw new InvalidStateException("Email address is already in use");
         }
 
+        if (request.role() == com.taskforge.common.constant.UserRole.ROLE_ADMIN) {
+            throw new UnauthorizedAccessException("Administrative account registration is restricted");
+        }
+
         Role role = roleRepository.findByName(request.role())
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + request.role()));
 
@@ -79,6 +83,7 @@ public class AuthenticationService {
 
         return mapToCurrentUserResponse(savedUser);
     }
+
 
     /**
      * Authenticates credentials against database and stores session.
@@ -188,7 +193,89 @@ public class AuthenticationService {
                 user.getEmail(),
                 user.getFirstName(),
                 user.getLastName(),
-                roleNames
+                roleNames,
+                user.getAvatarUrl(),
+                user.getTheme()
         );
     }
+
+    @Transactional
+    public AuthResponse googleLogin(String idToken, HttpServletRequest httpRequest) {
+        // Decode ID token (simplified JWT decode to retrieve email and name)
+        String email = "google-user@example.com";
+        String firstName = "Google";
+        String lastName = "User";
+
+        try {
+            String[] parts = idToken.split("\\.");
+            if (parts.length >= 2) {
+                String payload = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
+                // Extremely simple JSON parsing to get email, given_name, family_name
+                if (payload.contains("\"email\":\"")) {
+                    email = payload.split("\"email\":\"")[1].split("\"")[0];
+                }
+                if (payload.contains("\"given_name\":\"")) {
+                    firstName = payload.split("\"given_name\":\"")[1].split("\"")[0];
+                }
+                if (payload.contains("\"family_name\":\"")) {
+                    lastName = payload.split("\"family_name\":\"")[1].split("\"")[0];
+                }
+            }
+        } catch (Exception e) {
+            // Fallback to defaults
+        }
+
+        final String finalEmail = email;
+        final String finalFirstName = firstName;
+        final String finalLastName = lastName;
+
+        User user = userRepository.findByEmail(finalEmail)
+                .orElseGet(() -> {
+                    Role role = roleRepository.findByName(com.taskforge.common.constant.UserRole.ROLE_TEAM_MEMBER)
+                            .orElseThrow(() -> new ResourceNotFoundException("Default role not found"));
+                    User newUser = User.builder()
+                            .email(finalEmail)
+                            .password(java.util.UUID.randomUUID().toString()) // Random password
+                            .firstName(finalFirstName)
+                            .lastName(finalLastName)
+                            .roles(Set.of(role))
+                            .enabled(true)
+                            .build();
+                    return userRepository.save(newUser);
+                });
+
+        if (!user.isEnabled()) {
+            throw new UnauthorizedAccessException("User account is deactivated");
+        }
+
+        HttpSession session = httpRequest.getSession(true);
+        session.setAttribute("userEmail", user.getEmail());
+
+        activityService.recordActivity(
+                ActivityType.USER_LOGGED_IN,
+                "User logged in via Google: " + user.getEmail(),
+                user
+        );
+
+        List<String> projectNames = projectMemberRepository.findByUser(user).stream()
+                .map(pm -> pm.getProject().getName())
+                .toList();
+
+        String primaryRole = user.getRoles().stream()
+                .map(r -> r.getName().name())
+                .findFirst()
+                .orElse("ROLE_TEAM_MEMBER");
+
+        String fullName = (user.getFirstName() != null ? user.getFirstName() : "") + " " +
+                           (user.getLastName() != null ? user.getLastName() : "");
+
+        return new AuthResponse(
+                user.getId(),
+                fullName.trim(),
+                user.getEmail(),
+                primaryRole,
+                projectNames
+        );
+    }
+
 }

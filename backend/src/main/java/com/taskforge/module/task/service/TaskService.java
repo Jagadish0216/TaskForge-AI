@@ -15,6 +15,11 @@ import com.taskforge.module.task.repository.TaskRepository;
 import com.taskforge.module.user.entity.User;
 import com.taskforge.module.user.repository.UserRepository;
 import com.taskforge.security.SecurityUtils;
+import com.taskforge.module.notification.service.NotificationService;
+import com.taskforge.common.constant.NotificationType;
+import com.taskforge.common.constant.ProjectMemberRole;
+import jakarta.persistence.criteria.Subquery;
+import jakarta.persistence.criteria.Root;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -42,6 +47,7 @@ public class TaskService {
     private final com.taskforge.module.task.repository.CommentHistoryRepository commentHistoryRepository;
     private final com.taskforge.module.storage.repository.AttachmentRepository attachmentRepository;
     private final com.taskforge.module.activity.repository.ActivityLogRepository activityLogRepository;
+    private final NotificationService notificationService;
 
     public TaskService(
             TaskRepository taskRepository,
@@ -53,7 +59,8 @@ public class TaskService {
             com.taskforge.module.task.repository.CommentRepository commentRepository,
             com.taskforge.module.task.repository.CommentHistoryRepository commentHistoryRepository,
             com.taskforge.module.storage.repository.AttachmentRepository attachmentRepository,
-            com.taskforge.module.activity.repository.ActivityLogRepository activityLogRepository
+            com.taskforge.module.activity.repository.ActivityLogRepository activityLogRepository,
+            NotificationService notificationService
     ) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
@@ -65,6 +72,7 @@ public class TaskService {
         this.commentHistoryRepository = commentHistoryRepository;
         this.attachmentRepository = attachmentRepository;
         this.activityLogRepository = activityLogRepository;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -83,6 +91,7 @@ public class TaskService {
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + request.projectId()));
 
         verifyModificationAccess(project);
+        User currentUser = getCurrentAuthenticatedUser(project);
 
         User assignee = null;
         if (request.assigneeId() != null) {
@@ -98,6 +107,11 @@ public class TaskService {
         Task task = taskMapper.toEntity(request);
         task.setProject(project);
         task.setAssignee(assignee);
+
+        if (assignee != null) {
+            task.setAssignedBy(currentUser);
+            task.setAssignedDate(java.time.LocalDateTime.now());
+        }
 
         if (task.getStatus() == TaskStatus.DONE) {
             task.setCompletedDate(LocalDate.now());
@@ -118,6 +132,13 @@ public class TaskService {
                     "Task '" + savedTask.getTitle() + "' assigned to: " + savedTask.getAssignee().getEmail(),
                     savedTask.getProject(),
                     savedTask
+            );
+
+            notificationService.createNotification(
+                    savedTask.getAssignee(),
+                    "You have been assigned a new task",
+                    "Project: " + project.getName() + " | Task: " + savedTask.getTitle() + " | Assigned By: " + (currentUser.getFirstName() + " " + currentUser.getLastName()).trim() + " | Priority: " + savedTask.getPriority() + " | Deadline: " + (savedTask.getDueDate() != null ? savedTask.getDueDate().toString() : "N/A"),
+                    NotificationType.TASK_ASSIGNED
             );
         }
 
@@ -160,13 +181,21 @@ public class TaskService {
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + id));
 
         User currentUser = getCurrentAuthenticatedUser(task.getProject());
-        boolean isTeamMember = currentUser.getRoles().stream()
-                .anyMatch(r -> r.getName() == UserRole.ROLE_TEAM_MEMBER);
+        boolean canManage = false;
+        boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
+        if (isAdmin) {
+            canManage = true;
+        } else {
+            com.taskforge.module.project.entity.ProjectMember member = projectMemberRepository.findByProjectAndUser(task.getProject(), currentUser).orElse(null);
+            if (member != null && (member.getRole() == ProjectMemberRole.OWNER || member.getRole() == ProjectMemberRole.MANAGER)) {
+                canManage = true;
+            }
+        }
 
         TaskStatus oldStatus = task.getStatus();
         User oldAssignee = task.getAssignee();
 
-        if (isTeamMember) {
+        if (!canManage) {
             if (task.getAssignee() == null || !task.getAssignee().getId().equals(currentUser.getId())) {
                 throw new UnauthorizedAccessException("You can only update tasks assigned to you");
             }
@@ -176,7 +205,6 @@ public class TaskService {
                 task.setActualHours(request.actualHours());
             }
         } else {
-            verifyModificationAccess(task.getProject());
 
             task.setTitle(request.title());
             task.setDescription(request.description());
@@ -188,17 +216,59 @@ public class TaskService {
 
             updateTaskStatus(task, request.status());
 
+            User assignee = null;
             if (request.assigneeId() != null) {
-                User assignee = userRepository.findById(request.assigneeId())
+                assignee = userRepository.findById(request.assigneeId())
                         .orElseThrow(() -> new ResourceNotFoundException("Assignee user not found with id: " + request.assigneeId()));
 
                 boolean isMember = projectMemberRepository.existsByProjectAndUser(task.getProject(), assignee);
                 if (!isMember) {
                     throw new InvalidStateException("Assignee must be a member of the project");
                 }
+            }
+
+            boolean changed = (oldAssignee == null && assignee != null) ||
+                              (oldAssignee != null && assignee != null && !oldAssignee.getId().equals(assignee.getId())) ||
+                              (oldAssignee != null && assignee == null);
+            if (changed) {
                 task.setAssignee(assignee);
-            } else {
-                task.setAssignee(null);
+                task.setAssignedBy(currentUser);
+                task.setAssignedDate(java.time.LocalDateTime.now());
+
+                String originalName = oldAssignee != null ? (oldAssignee.getFirstName() + " " + oldAssignee.getLastName()).trim() : "Unassigned";
+                if (originalName.isEmpty() && oldAssignee != null) {
+                    originalName = oldAssignee.getEmail();
+                }
+                String newName = assignee != null ? (assignee.getFirstName() + " " + assignee.getLastName()).trim() : "Unassigned";
+                if (newName.isEmpty() && assignee != null) {
+                    newName = assignee.getEmail();
+                }
+                String historyMsg = "Task reassigned. Originally Assigned To: " + originalName + " | Reassigned To: " + newName + " | Reassigned By: " + (currentUser.getFirstName() + " " + currentUser.getLastName()).trim();
+
+                activityService.recordActivity(
+                        com.taskforge.common.constant.ActivityType.TASK_ASSIGNED,
+                        historyMsg,
+                        task.getProject(),
+                        task
+                );
+
+                if (assignee != null) {
+                    notificationService.createNotification(
+                            assignee,
+                            "You have been assigned a new task",
+                            "Project: " + task.getProject().getName() + " | Task: " + task.getTitle() + " | Assigned By: " + (currentUser.getFirstName() + " " + currentUser.getLastName()).trim() + " | Priority: " + task.getPriority() + " | Deadline: " + (task.getDueDate() != null ? task.getDueDate().toString() : "N/A"),
+                            NotificationType.TASK_ASSIGNED
+                    );
+                }
+
+                if (oldAssignee != null) {
+                    notificationService.createNotification(
+                            oldAssignee,
+                            "You have been unassigned from a task",
+                            "Project: " + task.getProject().getName() + " | Task: " + task.getTitle() + " | Unassigned By: " + (currentUser.getFirstName() + " " + currentUser.getLastName()).trim(),
+                            NotificationType.TASK_ASSIGNED
+                    );
+                }
             }
         }
 
@@ -229,14 +299,47 @@ public class TaskService {
 
         User newAssignee = updatedTask.getAssignee();
         boolean assigneeChanged = (oldAssignee == null && newAssignee != null) ||
-                                  (oldAssignee != null && newAssignee != null && !oldAssignee.getId().equals(newAssignee.getId()));
+                                  (oldAssignee != null && newAssignee != null && !oldAssignee.getId().equals(newAssignee.getId())) ||
+                                  (oldAssignee != null && newAssignee == null);
         if (assigneeChanged) {
+            String oldAssigneeName = oldAssignee != null
+                    ? (oldAssignee.getFirstName() + " " + oldAssignee.getLastName()).trim() + " (" + oldAssignee.getEmail() + ")"
+                    : "Unassigned";
+            String newAssigneeName = newAssignee != null
+                    ? (newAssignee.getFirstName() + " " + newAssignee.getLastName()).trim() + " (" + newAssignee.getEmail() + ")"
+                    : "Unassigned";
+            String currentUserName = (currentUser.getFirstName() + " " + currentUser.getLastName()).trim();
+            String timestamp = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(java.time.LocalDateTime.now());
+
+            String activityDesc = String.format("Task reassigned. Originally Assigned To: %s | Reassigned By: %s | Reassigned Date: %s",
+                    oldAssigneeName, currentUserName, timestamp);
+
             activityService.recordActivity(
                     com.taskforge.common.constant.ActivityType.TASK_ASSIGNED,
-                    "Task '" + updatedTask.getTitle() + "' assigned to: " + newAssignee.getEmail(),
+                    activityDesc,
                     updatedTask.getProject(),
                     updatedTask
             );
+
+            // Notify New Assignee if present
+            if (newAssignee != null) {
+                notificationService.createNotification(
+                        newAssignee,
+                        "You have been assigned a new task",
+                        "Project: " + updatedTask.getProject().getName() + " | Task: " + updatedTask.getTitle() + " | Assigned By: " + currentUserName + " | Priority: " + updatedTask.getPriority() + " | Deadline: " + (updatedTask.getDueDate() != null ? updatedTask.getDueDate().toString() : "N/A"),
+                        NotificationType.TASK_ASSIGNED
+                );
+            }
+
+            // Notify Old Assignee if present
+            if (oldAssignee != null) {
+                notificationService.createNotification(
+                        oldAssignee,
+                        "This task has been reassigned",
+                        "The task '" + updatedTask.getTitle() + "' in project '" + updatedTask.getProject().getName() + "' previously assigned to you has been reassigned to " + (newAssignee != null ? newAssignee.getFirstName() + " " + newAssignee.getLastName() : "Unassigned") + ".",
+                        NotificationType.TASK_ASSIGNED
+                );
+            }
         }
 
         return taskMapper.toResponse(updatedTask);
@@ -311,6 +414,9 @@ public class TaskService {
 
         verifyModificationAccess(task.getProject());
 
+        User currentUser = getCurrentAuthenticatedUser(task.getProject());
+        User oldAssignee = task.getAssignee();
+
         if (userId != null) {
             User assignee = userRepository.findById(userId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
@@ -320,23 +426,59 @@ public class TaskService {
                 throw new InvalidStateException("Assignee must be a member of the project");
             }
             task.setAssignee(assignee);
+            task.setAssignedBy(currentUser);
+            task.setAssignedDate(java.time.LocalDateTime.now());
         } else {
             task.setAssignee(null);
+            task.setAssignedBy(null);
+            task.setAssignedDate(null);
         }
 
         Task updatedTask = taskRepository.save(task);
 
-        if (updatedTask.getAssignee() != null) {
+        boolean changed = (oldAssignee == null && updatedTask.getAssignee() != null) ||
+                          (oldAssignee != null && updatedTask.getAssignee() != null && !oldAssignee.getId().equals(updatedTask.getAssignee().getId())) ||
+                          (oldAssignee != null && updatedTask.getAssignee() == null);
+
+        if (changed) {
+            String originalName = oldAssignee != null ? (oldAssignee.getFirstName() + " " + oldAssignee.getLastName()).trim() : "Unassigned";
+            if (originalName.isEmpty() && oldAssignee != null) {
+                originalName = oldAssignee.getEmail();
+            }
+            String newName = updatedTask.getAssignee() != null ? (updatedTask.getAssignee().getFirstName() + " " + updatedTask.getAssignee().getLastName()).trim() : "Unassigned";
+            if (newName.isEmpty() && updatedTask.getAssignee() != null) {
+                newName = updatedTask.getAssignee().getEmail();
+            }
+            String historyMsg = "Task reassigned. Originally Assigned To: " + originalName + " | Reassigned To: " + newName + " | Reassigned By: " + (currentUser.getFirstName() + " " + currentUser.getLastName()).trim();
+
             activityService.recordActivity(
                     com.taskforge.common.constant.ActivityType.TASK_ASSIGNED,
-                    "Task '" + updatedTask.getTitle() + "' assigned to: " + updatedTask.getAssignee().getEmail(),
+                    historyMsg,
                     updatedTask.getProject(),
                     updatedTask
             );
+
+            if (updatedTask.getAssignee() != null) {
+                notificationService.createNotification(
+                        updatedTask.getAssignee(),
+                        "You have been assigned a new task",
+                        "Project: " + updatedTask.getProject().getName() + " | Task: " + updatedTask.getTitle() + " | Assigned By: " + (currentUser.getFirstName() + " " + currentUser.getLastName()).trim() + " | Priority: " + updatedTask.getPriority() + " | Deadline: " + (updatedTask.getDueDate() != null ? updatedTask.getDueDate().toString() : "N/A"),
+                        NotificationType.TASK_ASSIGNED
+                );
+            }
+
+            if (oldAssignee != null) {
+                notificationService.createNotification(
+                        oldAssignee,
+                        "You have been unassigned from a task",
+                        "Project: " + updatedTask.getProject().getName() + " | Task: " + updatedTask.getTitle() + " | Unassigned By: " + (currentUser.getFirstName() + " " + currentUser.getLastName()).trim(),
+                        NotificationType.TASK_ASSIGNED
+                );
+            }
         } else {
             activityService.recordActivity(
                     com.taskforge.common.constant.ActivityType.TASK_UPDATED,
-                    "Task '" + updatedTask.getTitle() + "' unassigned",
+                    "Task '" + updatedTask.getTitle() + "' details updated",
                     updatedTask.getProject(),
                     updatedTask
             );
@@ -357,8 +499,15 @@ public class TaskService {
         Project project = null;
         if (searchRequest != null && searchRequest.projectId() != null) {
             project = projectRepository.findById(searchRequest.projectId()).orElse(null);
+            if (project != null) {
+                verifyAccess(project);
+            }
         }
         User currentUser = getCurrentAuthenticatedUser(project);
+        boolean isAdmin = currentUser.getRoles().stream()
+                .anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
+        boolean isPM = currentUser.getRoles().stream()
+                .anyMatch(r -> r.getName() == UserRole.ROLE_PROJECT_MANAGER);
         boolean isTeamMember = currentUser.getRoles().stream()
                 .anyMatch(r -> r.getName() == UserRole.ROLE_TEAM_MEMBER);
 
@@ -390,10 +539,31 @@ public class TaskService {
                 predicates.add(keywordPredicate);
             }
 
-            if (isTeamMember) {
-                predicates.add(cb.equal(root.get("assignee").get("id"), currentUser.getId()));
-            } else if (searchRequest.assigneeId() != null) {
+            if (searchRequest.assigneeId() != null) {
                 predicates.add(cb.equal(root.get("assignee").get("id"), searchRequest.assigneeId()));
+            }
+
+            if (!isAdmin && searchRequest.projectId() == null) {
+                Subquery<Long> subquery = query.subquery(Long.class);
+                Root<com.taskforge.module.project.entity.ProjectMember> pmRoot = subquery.from(com.taskforge.module.project.entity.ProjectMember.class);
+                
+                if (isPM) {
+                    subquery.select(pmRoot.get("project").get("id"))
+                            .where(cb.and(
+                                    cb.equal(pmRoot.get("user"), currentUser),
+                                    pmRoot.get("role").in(ProjectMemberRole.OWNER, ProjectMemberRole.MANAGER)
+                            ));
+                } else if (isTeamMember) {
+                    subquery.select(pmRoot.get("project").get("id"))
+                            .where(cb.equal(pmRoot.get("user"), currentUser));
+                } else {
+                    subquery.select(pmRoot.get("project").get("id"))
+                            .where(cb.and(
+                                    cb.equal(pmRoot.get("user"), currentUser),
+                                    cb.equal(pmRoot.get("role"), ProjectMemberRole.OWNER)
+                            ));
+                }
+                predicates.add(root.get("project").get("id").in(subquery));
             }
 
             return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
@@ -490,13 +660,42 @@ public class TaskService {
 
     private void verifyReadAccess(Task task) {
         User currentUser = getCurrentAuthenticatedUser(task.getProject());
-        boolean isTeamMember = currentUser.getRoles().stream()
-                .anyMatch(r -> r.getName() == UserRole.ROLE_TEAM_MEMBER);
+        boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
+        if (isAdmin) {
+            return;
+        }
 
-        if (isTeamMember) {
-            if (task.getAssignee() == null || !task.getAssignee().getId().equals(currentUser.getId())) {
-                throw new UnauthorizedAccessException("You do not have permission to view this task");
+        boolean isMember = projectMemberRepository.existsByProjectAndUser(task.getProject(), currentUser);
+        if (!isMember) {
+            throw new UnauthorizedAccessException("You do not have permission to view this task. You must be a member of the project.");
+        }
+    }
+
+    private void verifyAccess(Project project) {
+        User currentUser = getCurrentAuthenticatedUser(project);
+        boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
+        if (isAdmin) {
+            return;
+        }
+
+        com.taskforge.module.project.entity.ProjectMember member = projectMemberRepository.findByProjectAndUser(project, currentUser)
+                .orElseThrow(() -> new UnauthorizedAccessException("You do not have permission to access this project"));
+
+        boolean isPM = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_PROJECT_MANAGER);
+        if (isPM) {
+            if (member.getRole() != ProjectMemberRole.OWNER && member.getRole() != ProjectMemberRole.MANAGER) {
+                throw new UnauthorizedAccessException("Project Managers can only view projects they own or manage");
             }
+            return;
+        }
+
+        boolean isTeamMember = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_TEAM_MEMBER);
+        if (isTeamMember) {
+            return;
+        }
+
+        if (member.getRole() != ProjectMemberRole.OWNER) {
+            throw new UnauthorizedAccessException("You can only view projects you own");
         }
     }
 
@@ -504,24 +703,16 @@ public class TaskService {
         User currentUser = getCurrentAuthenticatedUser(project);
 
         boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
-        boolean isPM = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_PROJECT_MANAGER);
-
         if (isAdmin) {
             return;
         }
 
-        if (isPM) {
-            if (!project.getOwner().getId().equals(currentUser.getId())) {
-                throw new UnauthorizedAccessException("You can only manage tasks in projects you own");
-            }
+        com.taskforge.module.project.entity.ProjectMember member = projectMemberRepository.findByProjectAndUser(project, currentUser).orElse(null);
+        if (member != null && (member.getRole() == ProjectMemberRole.OWNER || member.getRole() == ProjectMemberRole.MANAGER)) {
             return;
         }
 
-        if (project.getOwner().getId().equals(currentUser.getId())) {
-            return;
-        }
-
-        throw new UnauthorizedAccessException("You do not have permission to manage tasks in this project");
+        throw new UnauthorizedAccessException("You do not have permission to manage/assign tasks in this project. Only Project Owner, Project Manager, or Admin can assign tasks.");
     }
 
     private void updateTaskStatus(Task task, TaskStatus newStatus) {

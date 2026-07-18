@@ -51,6 +51,13 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success(response, "Profile updated successfully"));
     }
 
+    @PostMapping(value = "/me/avatar", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload current user avatar", description = "Uploads an avatar file and sets it for the currently authenticated user.")
+    public ResponseEntity<ApiResponse<UserResponse>> uploadAvatar(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        UserResponse response = userService.uploadUserAvatar(file);
+        return ResponseEntity.ok(ApiResponse.success(response, "Avatar uploaded successfully"));
+    }
+
     /**
      * Retrieves usage statistics for the currently authenticated user.
      *

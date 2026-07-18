@@ -34,3 +34,19 @@ export const truncateText = (text, maxLength = 100) => {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength) + '...';
 };
+
+export const getAvatarUrl = (avatarUrl) => {
+  if (!avatarUrl) return null;
+  if (avatarUrl.startsWith('http')) {
+    return avatarUrl;
+  }
+  const apiRoot = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+  let path = avatarUrl;
+  if (path.startsWith('/api/v1')) {
+    path = path.substring(7);
+  }
+  if (!path.startsWith('/')) {
+    path = '/' + path;
+  }
+  return `${apiRoot}${path}`;
+};

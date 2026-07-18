@@ -39,5 +39,14 @@ public record ProjectUpdateRequest(
     LocalDate startDate,
 
     @Schema(description = "Updated target end date", example = "2027-01-15")
-    LocalDate endDate
+    LocalDate endDate,
+
+    @Schema(description = "Updated project phase", example = "Planning")
+    String phase,
+
+    @Schema(description = "Updated estimated team size", example = "1-5")
+    String teamSize,
+
+    @Schema(description = "Updated technology stack used", example = "React, Spring Boot")
+    String techStack
 ) {}

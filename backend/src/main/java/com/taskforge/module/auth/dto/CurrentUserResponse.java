@@ -21,5 +21,11 @@ public record CurrentUserResponse(
     String lastName,
 
     @Schema(description = "Set of assigned roles")
-    Set<String> roles
+    Set<String> roles,
+
+    @Schema(description = "User's avatar URL")
+    String avatarUrl,
+
+    @Schema(description = "User's selected UI theme")
+    String theme
 ) {}

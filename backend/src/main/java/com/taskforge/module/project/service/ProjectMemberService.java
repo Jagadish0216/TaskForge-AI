@@ -23,6 +23,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.taskforge.common.constant.NotificationType;
+import com.taskforge.module.notification.service.NotificationService;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,6 +41,7 @@ public class ProjectMemberService {
     private final UserRepository userRepository;
     private final ProjectMemberMapper projectMemberMapper;
     private final com.taskforge.module.activity.service.ActivityService activityService;
+    private final NotificationService notificationService;
 
     public ProjectMemberService(
             ProjectRepository projectRepository,
@@ -45,7 +49,8 @@ public class ProjectMemberService {
             ProjectInvitationRepository projectInvitationRepository,
             UserRepository userRepository,
             ProjectMemberMapper projectMemberMapper,
-            com.taskforge.module.activity.service.ActivityService activityService
+            com.taskforge.module.activity.service.ActivityService activityService,
+            NotificationService notificationService
     ) {
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
@@ -53,6 +58,7 @@ public class ProjectMemberService {
         this.userRepository = userRepository;
         this.projectMemberMapper = projectMemberMapper;
         this.activityService = activityService;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -90,16 +96,31 @@ public class ProjectMemberService {
                 .invitee(invitee)
                 .inviter(currentUser)
                 .role(request.role())
-                .status(InvitationStatus.PENDING)
+                .status(InvitationStatus.ACCEPTED)
                 .build();
 
         ProjectInvitation savedInvitation = projectInvitationRepository.save(invitation);
 
+        // Add user as a project member directly
+        ProjectMember member = ProjectMember.builder()
+                .project(project)
+                .user(invitee)
+                .role(request.role())
+                .build();
+        projectMemberRepository.save(member);
+
         activityService.recordActivity(
-                com.taskforge.common.constant.ActivityType.MEMBER_INVITED,
-                "Member invited: " + invitee.getEmail() + " as " + request.role(),
+                com.taskforge.common.constant.ActivityType.MEMBER_JOINED,
+                "Member added: " + invitee.getEmail() + " as " + request.role(),
                 project,
                 null
+        );
+
+        notificationService.createNotification(
+                invitee,
+                "You have been added to a project",
+                "You have been added to project " + project.getName() + " as " + request.role(),
+                NotificationType.PROJECT_INVITATION
         );
 
         return projectMemberMapper.toResponse(savedInvitation);

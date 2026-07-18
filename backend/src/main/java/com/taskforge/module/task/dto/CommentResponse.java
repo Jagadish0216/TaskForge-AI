@@ -11,6 +11,7 @@ public record CommentResponse(
     Long authorId,
     String authorName,
     String authorEmail,
+    String authorAvatarUrl,
     Long parentCommentId,
     boolean edited,
     boolean deleted,

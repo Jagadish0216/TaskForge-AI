@@ -61,6 +61,13 @@ public class Task extends BaseEntity {
     @JoinColumn(name = "assignee_id")
     private User assignee;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_by_id")
+    private User assignedBy;
+
+    @Column(name = "assigned_date")
+    private java.time.LocalDateTime assignedDate;
+
     public Task() {}
 
     public Task(Long id, String title, String description, TaskStatus status, TaskPriority priority, LocalDate startDate, LocalDate dueDate, LocalDate completedDate, Integer estimatedHours, Integer actualHours, Project project, User assignee) {
@@ -114,6 +121,12 @@ public class Task extends BaseEntity {
     public User getAssignee() { return assignee; }
     public void setAssignee(User assignee) { this.assignee = assignee; }
 
+    public User getAssignedBy() { return assignedBy; }
+    public void setAssignedBy(User assignedBy) { this.assignedBy = assignedBy; }
+
+    public java.time.LocalDateTime getAssignedDate() { return assignedDate; }
+    public void setAssignedDate(java.time.LocalDateTime assignedDate) { this.assignedDate = assignedDate; }
+
     public static TaskBuilder builder() {
         return new TaskBuilder();
     }
@@ -131,6 +144,8 @@ public class Task extends BaseEntity {
         private Integer actualHours;
         private Project project;
         private User assignee;
+        private User assignedBy;
+        private java.time.LocalDateTime assignedDate;
 
         public TaskBuilder id(Long id) { this.id = id; return this; }
         public TaskBuilder title(String title) { this.title = title; return this; }
@@ -144,9 +159,14 @@ public class Task extends BaseEntity {
         public TaskBuilder actualHours(Integer actualHours) { this.actualHours = actualHours; return this; }
         public TaskBuilder project(Project project) { this.project = project; return this; }
         public TaskBuilder assignee(User assignee) { this.assignee = assignee; return this; }
+        public TaskBuilder assignedBy(User assignedBy) { this.assignedBy = assignedBy; return this; }
+        public TaskBuilder assignedDate(java.time.LocalDateTime assignedDate) { this.assignedDate = assignedDate; return this; }
 
         public Task build() {
-            return new Task(id, title, description, status, priority, startDate, dueDate, completedDate, estimatedHours, actualHours, project, assignee);
+            Task task = new Task(id, title, description, status, priority, startDate, dueDate, completedDate, estimatedHours, actualHours, project, assignee);
+            task.setAssignedBy(assignedBy);
+            task.setAssignedDate(assignedDate);
+            return task;
         }
     }
 

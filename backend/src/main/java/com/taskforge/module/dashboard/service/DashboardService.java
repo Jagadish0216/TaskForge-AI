@@ -18,6 +18,9 @@ import com.taskforge.module.task.repository.TaskRepository;
 import com.taskforge.module.user.entity.User;
 import com.taskforge.module.user.repository.UserRepository;
 import com.taskforge.security.SecurityUtils;
+import com.taskforge.module.project.entity.ProjectMember;
+import com.taskforge.module.project.repository.ProjectMemberRepository;
+import com.taskforge.common.constant.UserRole;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -37,6 +40,7 @@ public class DashboardService {
     private final TaskRepository taskRepository;
     private final ActivityLogRepository activityLogRepository;
     private final UserRepository userRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final TaskMapper taskMapper;
     private final ActivityMapper activityMapper;
 
@@ -45,6 +49,7 @@ public class DashboardService {
             TaskRepository taskRepository,
             ActivityLogRepository activityLogRepository,
             UserRepository userRepository,
+            ProjectMemberRepository projectMemberRepository,
             TaskMapper taskMapper,
             ActivityMapper activityMapper
     ) {
@@ -52,6 +57,7 @@ public class DashboardService {
         this.taskRepository = taskRepository;
         this.activityLogRepository = activityLogRepository;
         this.userRepository = userRepository;
+        this.projectMemberRepository = projectMemberRepository;
         this.taskMapper = taskMapper;
         this.activityMapper = activityMapper;
     }
@@ -60,13 +66,27 @@ public class DashboardService {
     public DashboardStatsResponse getDashboardSummary() {
         User currentUser = getCurrentAuthenticatedUser();
 
-        // 1. Projects metrics
-        List<Project> allProjects = projectRepository.findAll();
+        // 1. Projects metrics - Filtered by visibility
+        List<Project> allProjects = projectRepository.findAll().stream()
+                .filter(p -> {
+                    try {
+                        verifyAccess(p, currentUser);
+                        return true;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .toList();
+
         long totalProjects = allProjects.size();
         long completedProjects = allProjects.stream().filter(p -> p.getStatus() == ProjectStatus.COMPLETED).count();
 
-        // 2. Tasks metrics
-        List<Task> allTasks = taskRepository.findAll();
+        // 2. Tasks metrics - Filtered to visible projects only
+        List<Long> visibleProjectIds = allProjects.stream().map(Project::getId).toList();
+        List<Task> allTasks = taskRepository.findAll().stream()
+                .filter(t -> visibleProjectIds.contains(t.getProject().getId()))
+                .toList();
+
         long totalTasks = allTasks.size();
         long completedTasks = allTasks.stream().filter(t -> t.getStatus() == TaskStatus.DONE).count();
         long pendingTasks = totalTasks - completedTasks;
@@ -86,9 +106,11 @@ public class DashboardService {
             projectHealth.put(project.getName(), Math.round(progress * 100.0) / 100.0);
         }
 
-        // 4. Recent Activities
+        // 4. Recent Activities - Filtered to visible projects only
         Pageable recentLogPageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt"));
-        List<ActivityLog> recentLogs = activityLogRepository.findAll(recentLogPageable).getContent();
+        List<ActivityLog> recentLogs = activityLogRepository.findAll(recentLogPageable).getContent().stream()
+                .filter(log -> log.getProject() == null || visibleProjectIds.contains(log.getProject().getId()))
+                .toList();
         List<ActivityResponse> recentActivities = activityMapper.toResponseList(recentLogs);
 
         // 5. Upcoming Deadlines
@@ -121,6 +143,33 @@ public class DashboardService {
                 teamProductivity,
                 taskDistribution
         );
+    }
+
+    private void verifyAccess(Project project, User currentUser) {
+        boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
+        if (isAdmin) {
+            return;
+        }
+
+        ProjectMember member = projectMemberRepository.findByProjectAndUser(project, currentUser)
+                .orElseThrow(() -> new UnauthorizedAccessException("You do not have access to this project"));
+
+        boolean isPM = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_PROJECT_MANAGER);
+        if (isPM) {
+            if (member.getRole() != com.taskforge.common.constant.ProjectMemberRole.OWNER && member.getRole() != com.taskforge.common.constant.ProjectMemberRole.MANAGER) {
+                throw new UnauthorizedAccessException("Project Managers can only view projects they own or manage");
+            }
+            return;
+        }
+
+        boolean isTeamMember = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_TEAM_MEMBER);
+        if (isTeamMember) {
+            return;
+        }
+
+        if (member.getRole() != com.taskforge.common.constant.ProjectMemberRole.OWNER) {
+            throw new UnauthorizedAccessException("You can only view projects you own");
+        }
     }
 
     private User getCurrentAuthenticatedUser() {

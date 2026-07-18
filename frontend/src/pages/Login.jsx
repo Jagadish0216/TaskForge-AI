@@ -15,8 +15,8 @@ import {
 import { useAuth } from '../hooks/useAuth';
 
 export const Login = () => {
-  const [email, setEmail] = useState('admin@taskforge.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -26,8 +26,13 @@ export const Login = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
-      navigate('/dashboard');
+      const u = await login(email, password);
+      const roles = u?.roles || (u?.role ? [u.role] : []);
+      if (roles.includes('ROLE_ADMIN')) {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
     } finally {
       setLoading(false);
@@ -145,7 +150,7 @@ export const Login = () => {
                 <input
                   type="email"
                   required
-                  placeholder="admin@taskforge.com"
+                  placeholder="Enter your email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder-slate-500 transition-all"
@@ -167,7 +172,7 @@ export const Login = () => {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-10 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder-slate-500 transition-all"

@@ -13,4 +13,5 @@ import java.util.List;
 public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long>, JpaSpecificationExecutor<ActivityLog> {
     List<ActivityLog> findByProject(Project project);
     List<ActivityLog> findByTask(Task task);
+    List<ActivityLog> findByUser(com.taskforge.module.user.entity.User user);
 }

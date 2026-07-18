@@ -19,6 +19,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import com.taskforge.module.storage.service.StorageService;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,19 +36,22 @@ public class UserService {
     private final ProjectMemberRepository projectMemberRepository;
     private final TaskRepository taskRepository;
     private final UserMapper userMapper;
+    private final StorageService storageService;
 
     public UserService(
             UserRepository userRepository,
             ProjectRepository projectRepository,
             ProjectMemberRepository projectMemberRepository,
             TaskRepository taskRepository,
-            UserMapper userMapper
+            UserMapper userMapper,
+            StorageService storageService
     ) {
         this.userRepository = userRepository;
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.taskRepository = taskRepository;
         this.userMapper = userMapper;
+        this.storageService = storageService;
     }
 
     /**
@@ -88,6 +93,22 @@ public class UserService {
 
         user.setFirstName(request.firstName());
         user.setLastName(request.lastName());
+        if (request.username() != null) user.setUsername(request.username());
+        if (request.phoneNumber() != null) user.setPhoneNumber(request.phoneNumber());
+        if (request.gender() != null) user.setGender(request.gender());
+        if (request.country() != null) user.setCountry(request.country());
+        if (request.city() != null) user.setCity(request.city());
+        if (request.language() != null) user.setLanguage(request.language());
+        if (request.timezone() != null) user.setTimezone(request.timezone());
+        if (request.department() != null) user.setDepartment(request.department());
+        if (request.designation() != null) user.setDesignation(request.designation());
+        if (request.bio() != null) user.setBio(request.bio());
+        if (request.skills() != null) user.setSkills(request.skills());
+        if (request.experienceLevel() != null) user.setExperienceLevel(request.experienceLevel());
+        if (request.aiPreferences() != null) user.setAiPreferences(request.aiPreferences());
+        if (request.theme() != null) user.setTheme(request.theme());
+        if (request.avatarUrl() != null) user.setAvatarUrl(request.avatarUrl());
+        if (request.dateOfBirth() != null) user.setDateOfBirth(request.dateOfBirth());
 
         User updatedUser = userRepository.save(user);
         return userMapper.toResponse(updatedUser);
@@ -151,6 +172,7 @@ public class UserService {
                 String searchPattern = "%" + searchRequest.keyword().toLowerCase() + "%";
                 var keywordPredicates = cb.or(
                         cb.like(cb.lower(root.get("email")), searchPattern),
+                        cb.like(cb.lower(root.get("username")), searchPattern),
                         cb.like(cb.lower(root.get("firstName")), searchPattern),
                         cb.like(cb.lower(root.get("lastName")), searchPattern)
                 );
@@ -255,5 +277,23 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
         user.setEnabled(false);
         userRepository.save(user);
+    }
+
+    @Transactional
+    public UserResponse uploadUserAvatar(MultipartFile file) {
+        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
+        User user;
+        if (email != null) {
+            user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
+        } else {
+            user = userRepository.findAll().stream().findFirst()
+                    .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
+        }
+
+        String uniqueName = storageService.store(file);
+        user.setAvatarUrl("/uploads/" + uniqueName);
+        User saved = userRepository.save(user);
+        return userMapper.toResponse(saved);
     }
 }

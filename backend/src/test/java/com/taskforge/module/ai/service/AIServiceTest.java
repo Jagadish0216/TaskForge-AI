@@ -71,7 +71,14 @@ class AIServiceTest {
         Project mockProject = Mockito.mock(Project.class);
         Mockito.when(mockProject.getId()).thenReturn(1L);
         Mockito.when(projectRepository.findById(1L)).thenReturn(Optional.of(mockProject));
-
-        assertDoesNotThrow(() -> aiService.generateAndPersistProject(new GenerateProjectRequest("Build a Hospital Management System")));
+        assertDoesNotThrow(() -> aiService.generateAndPersistProject(new GenerateProjectRequest(
+            "Hospital Management System",
+            "Build a Hospital Management System",
+            "MEDIUM",
+            "PLANNING",
+            "5",
+            "2026-12-31",
+            "React, Spring Boot"
+        )));
     }
 }

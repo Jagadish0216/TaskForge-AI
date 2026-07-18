@@ -13,6 +13,7 @@ import com.taskforge.module.activity.repository.ActivityLogRepository;
 import com.taskforge.module.project.entity.Project;
 import com.taskforge.module.project.repository.ProjectMemberRepository;
 import com.taskforge.module.project.repository.ProjectRepository;
+import com.taskforge.common.constant.ProjectMemberRole;
 import com.taskforge.module.task.entity.Task;
 import com.taskforge.module.user.entity.User;
 import com.taskforge.module.user.repository.UserRepository;
@@ -169,6 +170,21 @@ public class ActivityService {
      */
     @Transactional(readOnly = true)
     public ActivityPageResponse searchActivities(ActivitySearchRequest searchRequest, Pageable pageable) {
+        Project project = null;
+        if (searchRequest != null && searchRequest.projectId() != null) {
+            project = projectRepository.findById(searchRequest.projectId()).orElse(null);
+            if (project != null) {
+                verifyAccess(project);
+            }
+        }
+        User currentUser = getCurrentAuthenticatedUser(project);
+        boolean isAdmin = currentUser.getRoles().stream()
+                .anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
+        boolean isPM = currentUser.getRoles().stream()
+                .anyMatch(r -> r.getName() == UserRole.ROLE_PROJECT_MANAGER);
+        boolean isTeamMember = currentUser.getRoles().stream()
+                .anyMatch(r -> r.getName() == UserRole.ROLE_TEAM_MEMBER);
+
         Specification<ActivityLog> spec = (root, query, cb) -> {
             var predicates = new ArrayList<jakarta.persistence.criteria.Predicate>();
 
@@ -193,11 +209,65 @@ public class ActivityService {
                 predicates.add(cb.like(cb.lower(root.get("description")), searchPattern));
             }
 
+            if (!isAdmin && searchRequest.projectId() == null) {
+                jakarta.persistence.criteria.Subquery<Long> subquery = query.subquery(Long.class);
+                jakarta.persistence.criteria.Root<com.taskforge.module.project.entity.ProjectMember> pmRoot = subquery.from(com.taskforge.module.project.entity.ProjectMember.class);
+                
+                if (isPM) {
+                    subquery.select(pmRoot.get("project").get("id"))
+                            .where(cb.and(
+                                    cb.equal(pmRoot.get("user"), currentUser),
+                                    pmRoot.get("role").in(ProjectMemberRole.OWNER, ProjectMemberRole.MANAGER)
+                            ));
+                } else if (isTeamMember) {
+                    subquery.select(pmRoot.get("project").get("id"))
+                            .where(cb.equal(pmRoot.get("user"), currentUser));
+                } else {
+                    subquery.select(pmRoot.get("project").get("id"))
+                            .where(cb.and(
+                                    cb.equal(pmRoot.get("user"), currentUser),
+                                    cb.equal(pmRoot.get("role"), ProjectMemberRole.OWNER)
+                            ));
+                }
+                predicates.add(cb.or(
+                        cb.isNull(root.get("project")),
+                        root.get("project").get("id").in(subquery)
+                ));
+            }
+
             return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
         };
 
         Page<ActivityLog> logs = activityLogRepository.findAll(spec, pageable);
         return mapToPageResponse(logs);
+    }
+
+    private void verifyAccess(Project project) {
+        User currentUser = getCurrentAuthenticatedUser(project);
+        boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
+        if (isAdmin) {
+            return;
+        }
+
+        com.taskforge.module.project.entity.ProjectMember member = projectMemberRepository.findByProjectAndUser(project, currentUser)
+                .orElseThrow(() -> new UnauthorizedAccessException("You do not have permission to access this project"));
+
+        boolean isPM = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_PROJECT_MANAGER);
+        if (isPM) {
+            if (member.getRole() != ProjectMemberRole.OWNER && member.getRole() != ProjectMemberRole.MANAGER) {
+                throw new UnauthorizedAccessException("Project Managers can only view projects they own or manage");
+            }
+            return;
+        }
+
+        boolean isTeamMember = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_TEAM_MEMBER);
+        if (isTeamMember) {
+            return;
+        }
+
+        if (member.getRole() != ProjectMemberRole.OWNER) {
+            throw new UnauthorizedAccessException("You can only view projects you own");
+        }
     }
 
     private User getCurrentAuthenticatedUser() {

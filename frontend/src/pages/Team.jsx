@@ -1,15 +1,35 @@
-import { useState } from 'react';
-import { Users, UserPlus, Shield, Search, Mail, Check, X, ArrowRight, Activity, Code, Layers } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, UserPlus, Shield, Search, Mail, Check, X, ArrowRight, Activity, Code, Layers, MessageSquare } from 'lucide-react';
 import Card from '../components/common/Card';
 import Modal from '../components/common/Modal';
 import { getInitials } from '../utils/formatters';
+import { projectService } from '../services/services';
+import ProjectDiscussion from '../components/projects/ProjectDiscussion';
 import toast from 'react-hot-toast';
 
 export const Team = () => {
-  const [activeTab, setActiveTab] = useState('MEMBERS'); // MEMBERS, PERMISSIONS, INVITATIONS
+  const [activeTab, setActiveTab] = useState('DISCUSSION'); // DISCUSSION, MEMBERS, PERMISSIONS, INVITATIONS
   const [search, setSearch] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
+
+  useEffect(() => {
+    const fetchDiscussionProjects = async () => {
+      try {
+        const res = await projectService.getProjects();
+        const list = res.data?.content || (Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []));
+        setProjects(list);
+        if (list.length > 0 && !selectedProject) {
+          setSelectedProject(list[0]);
+        }
+      } catch (err) {
+        console.error('Failed to load projects for discussion selector', err);
+      }
+    };
+    fetchDiscussionProjects();
+  }, []);
 
   // Invite Form State
   const [inviteEmail, setInviteEmail] = useState('');
@@ -91,6 +111,7 @@ export const Team = () => {
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
         {[
+          { key: 'DISCUSSION', label: 'Discussion Log', icon: MessageSquare },
           { key: 'MEMBERS', label: `Active Members (${members.length})`, icon: Users },
           { key: 'PERMISSIONS', label: 'Role Permissions Matrix', icon: Shield },
           { key: 'INVITATIONS', label: `Pending Invitations (${invitations.length})`, icon: Mail },
@@ -112,6 +133,53 @@ export const Team = () => {
           );
         })}
       </div>
+
+      {/* Discussion View */}
+      {activeTab === 'DISCUSSION' && (
+        <Card className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+            <div>
+              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Project Discussion Log</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">Select a project channel to start communicating with your squad</p>
+            </div>
+            {projects.length > 0 && (
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-semibold text-slate-500">Project Channel:</span>
+                <select
+                  value={selectedProject?.id || ''}
+                  onChange={(e) => {
+                    const selectedId = Number(e.target.value);
+                    const found = projects.find((p) => p.id === selectedId);
+                    if (found) setSelectedProject(found);
+                  }}
+                  className="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-205 focus:outline-none"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      #{p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="h-[520px] rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+            {selectedProject ? (
+              <ProjectDiscussion
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                projectOwnerId={selectedProject.owner?.id}
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs py-12 space-y-2">
+                <MessageSquare className="w-10 h-10 text-slate-500 opacity-60" />
+                <p className="font-semibold">No active projects found</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Active Members View */}
       {activeTab === 'MEMBERS' && (

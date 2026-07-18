@@ -50,6 +50,12 @@ public record TaskResponse(
     @Schema(description = "Summary profile of parent project")
     ProjectSummaryResponse project,
 
+    @Schema(description = "Summary profile of user who assigned the task")
+    UserSummaryResponse assignedBy,
+
+    @Schema(description = "Timestamp when the task was assigned")
+    LocalDateTime assignedDate,
+
     @Schema(description = "Task creation timestamp")
     LocalDateTime createdAt,
 

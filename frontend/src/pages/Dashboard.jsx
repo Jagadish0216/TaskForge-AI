@@ -36,7 +36,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { dashboardService, activityService, taskService, projectService, calendarService } from '../services/services';
+import { dashboardService, activityService, taskService, projectService, calendarService, announcementService } from '../services/services';
 import { useAuth } from '../hooks/useAuth';
 import Card from '../components/common/Card';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -52,6 +52,7 @@ export const Dashboard = () => {
   const [activities, setActivities] = useState([]);
   const [upcomingTasks, setUpcomingTasks] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -66,11 +67,12 @@ export const Dashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const [sumRes, actRes, taskRes, projRes] = await Promise.all([
+      const [sumRes, actRes, taskRes, projRes, annRes] = await Promise.all([
         dashboardService.getSummary().catch(() => null),
         activityService.getRecentActivities().catch(() => null),
         taskService.getTasks().catch(() => null),
         projectService.getProjects().catch(() => null),
+        announcementService.getActiveAnnouncements().catch(() => null),
       ]);
 
       setSummary(sumRes?.data || sumRes || {});
@@ -83,6 +85,8 @@ export const Dashboard = () => {
       const rawProjData = projRes?.data ?? projRes;
       const allProjects = rawProjData?.content ?? (Array.isArray(rawProjData) ? rawProjData : []);
       setProjects(allProjects);
+
+      setAnnouncements(annRes?.data || annRes || []);
     } catch (err) {
       toast.error('Dashboard synchronization error');
     } finally {
@@ -182,6 +186,23 @@ export const Dashboard = () => {
 
   return (
     <div className="space-y-6 font-sans">
+      {/* System Announcements */}
+      {announcements.length > 0 && (
+        <div className="space-y-3">
+          {announcements.map((ann) => (
+            <div key={ann.id} className="relative p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 backdrop-blur-md flex items-start gap-3 shadow-md">
+              <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400 shrink-0">
+                <span>📢</span>
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-white leading-tight">{ann.title}</h4>
+                <p className="text-xs text-slate-350 leading-relaxed">{ann.content}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Hero Control Section */}
       <div className="relative p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 border border-slate-800 shadow-2xl overflow-hidden text-white backdrop-blur-xl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />

@@ -84,7 +84,15 @@ public class AIService {
      */
     @Transactional
     public ProjectResponse generateAndPersistProject(GenerateProjectRequest request) {
-        String prompt = PromptBuilder.buildGenerateProjectPrompt(request.prompt());
+        String prompt = PromptBuilder.buildGenerateProjectPrompt(
+                request.projectName(),
+                request.prompt(),
+                request.priority(),
+                request.projectPhase(),
+                request.estimatedTeamSize(),
+                request.deadline(),
+                request.technologyStack()
+        );
 
         log.info("\n================ GEMINI NEW PROJECT PROMPT ================\n{}\n===========================================================", prompt);
 
@@ -98,7 +106,7 @@ public class AIService {
         } catch (Exception e) {
             log.error("Failed to parse Gemini generated project JSON: {}", jsonText, e);
             dto = new GeneratedProjectDTO(
-                    request.prompt().length() > 50 ? request.prompt().substring(0, 50) : request.prompt(),
+                    request.projectName() != null ? request.projectName() : "AI Project",
                     "AI Generated Project for: " + request.prompt(),
                     List.of(new GeneratedProjectDTO.ModuleDTO("Core Features", "Primary setup module",
                             List.of(new GeneratedProjectDTO.TaskDTO("Setup System Architecture", request.prompt(), "HIGH", 8)))),
@@ -106,17 +114,34 @@ public class AIService {
             );
         }
 
-        String projectKey = generateUniqueProjectKey(dto.projectName());
+        String projectKey = generateUniqueProjectKey(dto.projectName() != null ? dto.projectName() : request.projectName());
+
+        ProjectPriority priorityVal = ProjectPriority.MEDIUM;
+        if (request.priority() != null) {
+            try {
+                priorityVal = ProjectPriority.valueOf(request.priority().toUpperCase());
+            } catch (Exception e) {}
+        }
+
+        LocalDate deadlineVal = LocalDate.now().plusMonths(3);
+        if (request.deadline() != null && !request.deadline().isBlank()) {
+            try {
+                deadlineVal = LocalDate.parse(request.deadline());
+            } catch (Exception e) {}
+        }
 
         ProjectCreateRequest projectCreateRequest = new ProjectCreateRequest(
-                dto.projectName() != null ? dto.projectName() : "AI Project",
+                request.projectName() != null ? request.projectName() : (dto.projectName() != null ? dto.projectName() : "AI Project"),
                 projectKey,
                 dto.description() != null ? dto.description() : request.prompt(),
                 ProjectStatus.PLANNING,
-                ProjectPriority.HIGH,
+                priorityVal,
                 ProjectVisibility.PRIVATE,
                 LocalDate.now(),
-                LocalDate.now().plusMonths(3)
+                deadlineVal,
+                request.projectPhase(),
+                request.estimatedTeamSize(),
+                request.technologyStack()
         );
 
         // 1. Save Project entity first
@@ -200,7 +225,15 @@ public class AIService {
             case NEW_PROJECT -> {
                 // DO NOT load current active project or workspace context
                 log.info("Rerouting prompt to NEW_PROJECT flow without active workspace context");
-                ProjectResponse createdProject = generateAndPersistProject(new GenerateProjectRequest(request.message()));
+                ProjectResponse createdProject = generateAndPersistProject(new GenerateProjectRequest(
+                        request.message(), // projectName
+                        request.message(), // prompt
+                        "MEDIUM",          // priority
+                        "Planning",        // projectPhase
+                        "1-5",             // estimatedTeamSize
+                        null,              // deadline
+                        null               // technologyStack
+                ));
                 String replyMessage = String.format(
                         "Successfully generated and created a new project **%s** (Key: `%s`) in the database with modules and tasks.\n\nDescription: %s",
                         createdProject.name(),

@@ -30,12 +30,14 @@ import KanbanBoard from '../components/tasks/KanbanBoard';
 import TaskModal from '../components/tasks/TaskModal';
 import TaskDetailsDrawer from '../components/tasks/TaskDetailsDrawer';
 import InviteMemberModal from '../components/projects/InviteMemberModal';
-import { getInitials, formatDate, formatDateTime } from '../utils/formatters';
+import { getInitials, formatDate, formatDateTime, getAvatarUrl } from '../utils/formatters';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 
 export const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -107,13 +109,34 @@ export const ProjectDetails = () => {
       await taskService.updateTask(taskId, payload);
       toast.success('Task status updated');
       fetchProjectData();
-    } catch (err) {}
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update task status');
+    }
   };
 
   const handleInviteMember = async (data) => {
-    await projectService.inviteMember(id, data);
-    toast.success('Member invitation sent!');
-    fetchProjectData();
+    try {
+      const res = await projectService.inviteMember(id, data);
+      const invitee = res.data?.invitee || res.invitee || {};
+      const name = `${invitee.firstName || ''} ${invitee.lastName || ''}`.trim() || data.email;
+      toast.success(`${name} has been added to the project.`);
+      fetchProjectData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add member');
+    }
+  };
+
+  const handleRemoveMember = async (memberId, memberName) => {
+    if (!window.confirm(`Are you sure you want to remove ${memberName} from this project?`)) {
+      return;
+    }
+    try {
+      await projectService.removeMember(id, memberId);
+      toast.success(`${memberName} has been removed from the project.`);
+      fetchProjectData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to remove member');
+    }
   };
 
   const handleFileUpload = async (e) => {
@@ -157,7 +180,7 @@ export const ProjectDetails = () => {
     if (!aiPrompt.trim()) return;
     setGeneratingAi(true);
     try {
-      const res = await aiService.generateSprint(aiPrompt);
+      const res = await aiService.planSprint(id, aiPrompt);
       const resData = res.data || res;
       setAiOutput(resData.generatedContent || resData);
       toast.success('AI Sprint generated!');
@@ -166,6 +189,26 @@ export const ProjectDetails = () => {
     } finally {
       setGeneratingAi(false);
     }
+  };
+
+  const canManageMembers = () => {
+    if (!user) return false;
+    const isGlobalAdmin = user.role === 'ROLE_ADMIN' || user.roles?.includes('ROLE_ADMIN');
+    const isGlobalPM = user.role === 'ROLE_PROJECT_MANAGER' || user.roles?.includes('ROLE_PROJECT_MANAGER');
+    if (isGlobalAdmin || isGlobalPM) return true;
+
+    // Check project owner:
+    if (project && (project.owner?.id === user.id || project.ownerId === user.id)) {
+      return true;
+    }
+
+    // Check project member role (OWNER or MANAGER):
+    const currentMemberRecord = members.find(m => (m.user?.id === user.id || m.userId === user.id));
+    if (currentMemberRecord && (currentMemberRecord.role === 'OWNER' || currentMemberRecord.role === 'MANAGER')) {
+      return true;
+    }
+
+    return false;
   };
 
   if (loading) return <LoadingSpinner fullScreen />;
@@ -195,23 +238,27 @@ export const ProjectDetails = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowInviteModal(true)}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5"
-            >
-              <UserPlus className="w-4 h-4" /> Invite Member
-            </button>
-            <button
-              onClick={() => setShowTaskModal(true)}
-              className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-md hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" /> Create Task
-            </button>
+            {canManageMembers() && (
+              <button
+                onClick={() => setShowInviteModal(true)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+              >
+                <UserPlus className="w-4 h-4" /> Add Member
+              </button>
+            )}
+            {canManageMembers() && (
+              <button
+                onClick={() => setShowTaskModal(true)}
+                className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-md hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" /> Create Task
+              </button>
+            )}
           </div>
         </div>
 
         {/* 8 Workspace Tabs Navigation */}
-        <div className="flex items-center gap-1.5 border-t border-slate-100 dark:border-slate-800/80 pt-4 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1.5 border-t border-slate-100 dark:border-slate-800/80 pt-4 pt-4 overflow-x-auto scrollbar-none">
           {[
             { key: 'overview', label: 'Overview', icon: Folder },
             { key: 'board', label: 'Kanban Board', icon: CheckSquare },
@@ -245,29 +292,79 @@ export const ProjectDetails = () => {
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2 space-y-4">
-            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">Project Scope Description</h3>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm uppercase tracking-wider pb-2 border-b border-slate-100 dark:border-slate-800">Project Scope Description</h3>
+            <p className="text-xs text-slate-655 dark:text-slate-350 leading-relaxed whitespace-pre-wrap">
               {project.description || 'No detailed project description provided.'}
             </p>
           </Card>
 
-          <Card className="space-y-4">
-            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">Workspace Metadata</h3>
-            <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500">Project Key:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{project.projectKey || project.key}</span>
+          <div className="space-y-6">
+            <Card className="space-y-4">
+              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm uppercase tracking-wider pb-2 border-b border-slate-100 dark:border-slate-800">Workspace Metadata</h3>
+              <div className="space-y-2.5 text-xs">
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500">Project Key:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{project.projectKey || project.key}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500">Visibility Flag:</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{project.visibility || 'PUBLIC'}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-500">Created Timestamp:</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{formatDate(project.createdAt)}</span>
+                </div>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500">Visibility Flag:</span>
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{project.visibility || 'PUBLIC'}</span>
+            </Card>
+
+            <Card className="space-y-4">
+              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm uppercase tracking-wider pb-2 border-b border-slate-100 dark:border-slate-800">Project Team Members</h3>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {members.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-3 text-center">No team members assigned.</p>
+                ) : (
+                  members.map((m) => {
+                    const u = m.user || m;
+                    const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+                    return (
+                      <div key={m.id} className="flex items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-805 rounded-xl text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {u.avatarUrl ? (
+                            <img
+                              src={getAvatarUrl(u.avatarUrl)}
+                              alt="Avatar"
+                              className="w-7 h-7 rounded-full object-cover shrink-0"
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 dark:bg-slate-800 dark:text-blue-400 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
+                              {getInitials(name)}
+                            </div>
+                          )}
+                          <div className="text-left truncate">
+                            <span className="font-semibold text-slate-900 dark:text-slate-100 block truncate">{name}</span>
+                            <span className="text-[10px] text-slate-400 block truncate">{u.email}</span>
+                            <span className="px-1.5 py-0.5 mt-0.5 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-300 text-[9px] font-bold rounded inline-block">
+                              {m.role || 'MEMBER'}
+                            </span>
+                          </div>
+                        </div>
+                        {canManageMembers() && m.role !== 'OWNER' && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMember(m.id, name)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full shrink-0"
+                            title="Remove Member"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-slate-500">Created Timestamp:</span>
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{formatDate(project.createdAt)}</span>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
         </div>
       )}
 
@@ -410,7 +507,7 @@ export const ProjectDetails = () => {
           </div>
 
           {aiOutput && (
-            <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-mono whitespace-pre-wrap text-slate-800 dark:text-slate-200">
+            <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-955 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-mono whitespace-pre-wrap text-slate-800 dark:text-slate-200">
               {typeof aiOutput === 'string' ? aiOutput : JSON.stringify(aiOutput, null, 2)}
             </div>
           )}
@@ -435,6 +532,7 @@ export const ProjectDetails = () => {
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
         onInvite={handleInviteMember}
+        excludeUserIds={members.map((m) => m.user?.id || m.userId || m.id).filter(Boolean)}
       />
     </div>
   );

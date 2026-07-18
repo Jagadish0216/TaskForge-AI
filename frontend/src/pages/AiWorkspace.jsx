@@ -70,6 +70,18 @@ export const AiWorkspace = () => {
   const [createdProject, setCreatedProject] = useState(null);
   const [structuredOutput, setStructuredOutput] = useState(null);
 
+  // AI Project Generator form state
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [generateForm, setGenerateForm] = useState({
+    projectName: '',
+    prompt: '',
+    priority: 'MEDIUM',
+    projectPhase: 'Planning',
+    estimatedTeamSize: '1-5',
+    deadline: '',
+    technologyStack: ''
+  });
+
   useEffect(() => {
     fetchProjects();
   }, []);
@@ -127,19 +139,27 @@ export const AiWorkspace = () => {
   };
 
   // SUGGESTED ACTION 1: Generate Project
-  const handleActionGenerateProject = async () => {
-    const promptText = prompt('Enter a description for the new project to generate:', 'Build a Hospital Management System');
-    if (!promptText || !promptText.trim()) return;
+  const handleActionGenerateProject = () => {
+    setShowGenerateModal(true);
+  };
 
+  const handleSubmitGenerateProject = async (e) => {
+    e.preventDefault();
+    if (!generateForm.projectName.trim() || !generateForm.prompt.trim()) {
+      toast.error('Project Name and Description/Prompt are required');
+      return;
+    }
+
+    setShowGenerateModal(false);
     setLoading(true);
     setCreatedProject(null);
     setStructuredOutput(null);
 
-    const userMsg = { id: Date.now(), sender: 'user', text: `Action: Generate Project for "${promptText}"` };
+    const userMsg = { id: Date.now(), sender: 'user', text: `Action: Generate Project "${generateForm.projectName}"` };
     setChatMessages((prev) => [...prev, userMsg]);
 
     try {
-      const res = await aiService.generateProject(promptText.trim());
+      const res = await aiService.generateProject(generateForm);
       const proj = res.data || res;
       setCreatedProject(proj);
       setChatMessages((prev) => [
@@ -526,6 +546,125 @@ export const AiWorkspace = () => {
           </div>
         </div>
       </main>
+
+      {showGenerateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl max-w-lg w-full overflow-hidden transform transition-all">
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" /> AI Project Generation Specifications
+              </h3>
+              <button
+                onClick={() => setShowGenerateModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-250 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={handleSubmitGenerateProject} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Project Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. TaskForge AI Platform"
+                  value={generateForm.projectName}
+                  onChange={(e) => setGenerateForm({ ...generateForm, projectName: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Project Description / Core Goal *</label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Describe what the system is or does..."
+                  value={generateForm.prompt}
+                  onChange={(e) => setGenerateForm({ ...generateForm, prompt: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Priority</label>
+                  <select
+                    value={generateForm.priority}
+                    onChange={(e) => setGenerateForm({ ...generateForm, priority: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="URGENT">Urgent</option>
+                    <option value="CRITICAL">Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Project Phase</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Planning"
+                    value={generateForm.projectPhase}
+                    onChange={(e) => setGenerateForm({ ...generateForm, projectPhase: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Estimated Team Size</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 5 members"
+                    value={generateForm.estimatedTeamSize}
+                    onChange={(e) => setGenerateForm({ ...generateForm, estimatedTeamSize: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Deadline</label>
+                  <input
+                    type="date"
+                    value={generateForm.deadline}
+                    onChange={(e) => setGenerateForm({ ...generateForm, deadline: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Technology Stack</label>
+                <input
+                  type="text"
+                  placeholder="e.g. React, Spring Boot, MySQL"
+                  value={generateForm.technologyStack}
+                  onChange={(e) => setGenerateForm({ ...generateForm, technologyStack: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:border-blue-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowGenerateModal(false)}
+                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold text-xs rounded-xl shadow-md hover:from-blue-700 hover:to-indigo-700 flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 animate-pulse" /> Generate Project
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

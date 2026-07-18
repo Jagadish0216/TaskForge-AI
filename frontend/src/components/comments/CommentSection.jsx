@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { FiMessageSquare, FiCornerDownRight, FiEdit2, FiTrash2, FiClock } from 'react-icons/fi';
 import { commentService } from '../../services/services';
-import { formatDateTime, getInitials } from '../../utils/formatters';
+import { formatDateTime, getInitials, getAvatarUrl } from '../../utils/formatters';
 import Modal from '../common/Modal';
 import toast from 'react-hot-toast';
 
@@ -96,9 +96,17 @@ export const CommentSection = ({ taskId, comments = [], onRefresh }) => {
       >
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
-              {getInitials(authorName)}
-            </div>
+            {item.authorAvatarUrl || (item.author && item.author.avatarUrl) ? (
+              <img
+                src={getAvatarUrl(item.authorAvatarUrl || item.author.avatarUrl)}
+                alt="Avatar"
+                className="w-7 h-7 rounded-full object-cover border border-slate-200"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                {getInitials(authorName)}
+              </div>
+            )}
             <div>
               <span className="font-semibold text-slate-800 text-xs">{authorName}</span>
               <span className="text-[10px] text-slate-400 ml-2">

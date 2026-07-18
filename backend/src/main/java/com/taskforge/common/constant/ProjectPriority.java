@@ -4,5 +4,6 @@ public enum ProjectPriority {
     LOW,
     MEDIUM,
     HIGH,
-    URGENT
+    URGENT,
+    CRITICAL
 }

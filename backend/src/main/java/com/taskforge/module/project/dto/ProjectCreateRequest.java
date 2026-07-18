@@ -46,5 +46,14 @@ public record ProjectCreateRequest(
     LocalDate startDate,
 
     @Schema(description = "Target end date", example = "2026-12-31")
-    LocalDate endDate
+    LocalDate endDate,
+
+    @Schema(description = "Project phase", example = "Planning")
+    String phase,
+
+    @Schema(description = "Estimated team size", example = "1-5")
+    String teamSize,
+
+    @Schema(description = "Technology stack used", example = "React, Spring Boot")
+    String techStack
 ) {}

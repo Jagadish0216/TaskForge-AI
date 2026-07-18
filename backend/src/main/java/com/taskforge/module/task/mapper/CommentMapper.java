@@ -14,6 +14,7 @@ public interface CommentMapper {
     @Mapping(target = "authorId", source = "author.id")
     @Mapping(target = "authorName", expression = "java(comment.getAuthor().getFirstName() + \" \" + comment.getAuthor().getLastName())")
     @Mapping(target = "authorEmail", source = "author.email")
+    @Mapping(target = "authorAvatarUrl", source = "author.avatarUrl")
     @Mapping(target = "parentCommentId", source = "parentComment.id")
     CommentResponse toResponse(Comment comment);
 

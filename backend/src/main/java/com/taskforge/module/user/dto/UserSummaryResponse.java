@@ -17,5 +17,8 @@ public record UserSummaryResponse(
     String firstName,
 
     @Schema(description = "Last name")
-    String lastName
+    String lastName,
+
+    @Schema(description = "Avatar URL")
+    String avatarUrl
 ) {}

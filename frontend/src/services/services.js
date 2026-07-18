@@ -11,6 +11,7 @@ export const authService = {
 export const userService = {
   getProfile: () => api.get('/users/me'),
   updateProfile: (data) => api.put('/users/me', data),
+  uploadAvatar: (formData) => api.post('/users/me/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   getUserById: (id) => api.get(`/users/${id}`),
   getUserByEmail: (email) => api.get('/users/email', { params: { email } }),
   searchUsers: (searchRequest = {}, params = {}) => api.post('/users/search', searchRequest, { params }),
@@ -113,8 +114,57 @@ export const attachmentService = {
 
 export const aiService = {
   chat: (message, projectId = null) => api.post('/ai/chat', { message, projectId }),
-  generateProject: (prompt) => api.post('/ai/project/generate', { prompt }),
+  generateProject: (payload) => {
+    if (typeof payload === 'string') {
+      return api.post('/ai/project/generate', { prompt: payload, projectName: payload });
+    }
+    return api.post('/ai/project/generate', payload);
+  },
   planSprint: (projectId, sprintGoal = '') => api.post('/ai/sprint/plan', { projectId, sprintGoal }),
   analyzeRisks: (projectId) => api.post('/ai/risk/analyze', { projectId }),
   generateDocumentation: (projectId, docType = 'README') => api.post('/ai/documentation', { projectId, docType }),
 };
+
+export const adminService = {
+  getStats: () => api.get('/admin/stats'),
+  getAnalytics: () => api.get('/admin/analytics'),
+  getAuditLogs: (params) => api.get('/admin/audit-logs', { params }),
+  getUsers: () => api.get('/admin/users'),
+  updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+  resetPassword: (id, data) => api.post(`/admin/users/${id}/reset-password`, data),
+  getUserProjects: (id) => api.get(`/admin/users/${id}/projects`),
+  getUserActivities: (id) => api.get(`/admin/users/${id}/activities`),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
+
+  getProjects: () => api.get('/admin/projects'),
+  transferOwnership: (id, userId) => api.put(`/admin/projects/${id}/transfer-ownership/${userId}`),
+  archiveProject: (id) => api.put(`/admin/projects/${id}/archive`),
+  restoreProject: (id) => api.put(`/admin/projects/${id}/restore`),
+  deleteProject: (id) => api.delete(`/admin/projects/${id}`),
+
+  getTasks: () => api.get('/admin/tasks'),
+  moveTask: (id, projectId) => api.put(`/admin/tasks/${id}/move/${projectId}`),
+  assignTask: (id, userId) => api.put(`/admin/tasks/${id}/assign/${userId}`),
+  updateTaskStatus: (id, status) => api.put(`/admin/tasks/${id}/status`, null, { params: { status } }),
+  deleteTask: (id) => api.delete(`/admin/tasks/${id}`),
+
+  getSettings: () => api.get('/admin/settings'),
+  updateSettings: (data) => api.put('/admin/settings', data),
+
+  getAnnouncements: () => api.get('/admin/announcements'),
+  createAnnouncement: (data) => api.post('/admin/announcements', data),
+  updateAnnouncement: (id, data) => api.put(`/admin/announcements/${id}`, data),
+  deleteAnnouncement: (id) => api.delete(`/admin/announcements/${id}`),
+};
+
+export const discussionService = {
+  getMessages: (projectId) => api.get(`/projects/${projectId}/messages`),
+  postMessage: (projectId, data) => api.post(`/projects/${projectId}/messages`, data),
+  editMessage: (projectId, messageId, data) => api.put(`/projects/${projectId}/messages/${messageId}`, data),
+  deleteMessage: (projectId, messageId) => api.delete(`/projects/${projectId}/messages/${messageId}`),
+};
+
+export const announcementService = {
+  getActiveAnnouncements: () => api.get('/announcements/active'),
+};
+

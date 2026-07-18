@@ -3,9 +3,33 @@ package com.taskforge.module.ai.util;
 public class PromptBuilder {
 
     public static String buildGenerateProjectPrompt(String promptText) {
+        return buildGenerateProjectPrompt("Unnamed AI Project", promptText, "MEDIUM", "Planning", "1-5", "", "React, Spring Boot");
+    }
+
+    public static String buildGenerateProjectPrompt(String projectName, String promptText, String priority, String phase, String teamSize, String deadline, String techStack) {
+        StringBuilder details = new StringBuilder();
+        details.append("Project Name: ").append(projectName).append("\n");
+        details.append("Project Description: ").append(promptText).append("\n");
+        if (priority != null && !priority.isBlank()) {
+            details.append("Priority: ").append(priority).append("\n");
+        }
+        if (phase != null && !phase.isBlank()) {
+            details.append("Project Phase: ").append(phase).append("\n");
+        }
+        if (teamSize != null && !teamSize.isBlank()) {
+            details.append("Estimated Team Size: ").append(teamSize).append("\n");
+        }
+        if (deadline != null && !deadline.isBlank()) {
+            details.append("Deadline: ").append(deadline).append("\n");
+        }
+        if (techStack != null && !techStack.isBlank()) {
+            details.append("Technology Stack: ").append(techStack).append("\n");
+        }
+
         return """
             You are an expert software project manager and system architect.
-            The user wants to generate a complete software project structure for: "%s".
+            The user wants to generate a complete software project structure with the following details:
+            %s
             
             Return strictly valid JSON matching this exact JSON schema:
             {
@@ -30,11 +54,11 @@ public class PromptBuilder {
             }
 
             Rules:
-            1. Priority must be one of: LOW, MEDIUM, HIGH, URGENT.
+            1. Priority must be one of: LOW, MEDIUM, HIGH, URGENT, CRITICAL.
             2. Estimated hours must be a positive integer between 2 and 40.
             3. Include 2 to 4 modules, each containing 2 to 4 concrete tasks.
             4. Respond ONLY with valid JSON. Do not include markdown formatting or explanations.
-            """.formatted(promptText);
+            """.formatted(details.toString());
     }
 
     public static String buildProjectChatPrompt(String userMessage, String projectContext) {

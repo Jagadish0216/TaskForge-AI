@@ -18,5 +18,8 @@ public record ProjectSummaryResponse(
     String projectKey,
 
     @Schema(description = "Project workflow status")
-    ProjectStatus status
+    ProjectStatus status,
+
+    @Schema(description = "Project phase")
+    String phase
 ) {}

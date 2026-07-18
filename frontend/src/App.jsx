@@ -31,6 +31,22 @@ import Team from './pages/Team';
 import ActivityCenter from './pages/ActivityCenter';
 import NotFound from './pages/NotFound';
 
+// Admin imports
+import AdminRoute from './components/layout/AdminRoute';
+import AdminLayout from './components/layout/AdminLayout';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminUsers from './pages/AdminUsers';
+import AdminProjects from './pages/AdminProjects';
+import AdminTasks from './pages/AdminTasks';
+import AdminTeams from './pages/AdminTeams';
+import AdminReports from './pages/AdminReports';
+import AdminAnalytics from './pages/AdminAnalytics';
+import AdminAuditLogs from './pages/AdminAuditLogs';
+import AdminSystemSettings from './pages/AdminSystemSettings';
+import AdminAnnouncements from './pages/AdminAnnouncements';
+import AdminAiUsage from './pages/AdminAiUsage';
+import AdminProfile from './pages/AdminProfile';
+
 export function App() {
   return (
     <Router>
@@ -88,6 +104,25 @@ export function App() {
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/search" element={<SearchPage />} />
+              </Route>
+            </Route>
+
+            {/* Gated Administrative Portal Routes */}
+            <Route element={<AdminRoute />}>
+              <Route element={<AdminLayout />}>
+                <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+                <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                <Route path="/admin/users" element={<AdminUsers />} />
+                <Route path="/admin/projects" element={<AdminProjects />} />
+                <Route path="/admin/tasks" element={<AdminTasks />} />
+                <Route path="/admin/teams" element={<AdminTeams />} />
+                <Route path="/admin/reports" element={<AdminReports />} />
+                <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
+                <Route path="/admin/system-settings" element={<AdminSystemSettings />} />
+                <Route path="/admin/announcements" element={<AdminAnnouncements />} />
+                <Route path="/admin/ai-usage" element={<AdminAiUsage />} />
+                <Route path="/admin/profile" element={<AdminProfile />} />
               </Route>
             </Route>
 

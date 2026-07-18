@@ -51,5 +51,14 @@ public record ProjectResponse(
     LocalDateTime createdAt,
 
     @Schema(description = "Project last updated timestamp")
-    LocalDateTime updatedAt
+    LocalDateTime updatedAt,
+
+    @Schema(description = "Project phase")
+    String phase,
+
+    @Schema(description = "Estimated team size")
+    String teamSize,
+
+    @Schema(description = "Technology stack used")
+    String techStack
 ) {}

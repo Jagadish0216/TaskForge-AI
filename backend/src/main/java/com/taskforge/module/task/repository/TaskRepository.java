@@ -19,4 +19,5 @@ public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificat
     List<Task> findByAssignee(User assignee);
     long countByAssignee(User assignee);
     long countByAssigneeAndStatus(User assignee, com.taskforge.common.constant.TaskStatus status);
+    long countByStatus(com.taskforge.common.constant.TaskStatus status);
 }

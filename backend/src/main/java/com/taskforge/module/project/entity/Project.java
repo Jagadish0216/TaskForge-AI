@@ -60,6 +60,18 @@ public class Project extends BaseEntity {
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
+    @Column(name = "ai_generated", nullable = false)
+    private boolean aiGenerated = false;
+
+    @Column(name = "phase", length = 50)
+    private String phase;
+
+    @Column(name = "team_size", length = 20)
+    private String teamSize;
+
+    @Column(name = "tech_stack", columnDefinition = "TEXT")
+    private String techStack;
+
     public Project() {}
 
     public Project(Long id, String name, String projectKey, String description, ProjectStatus status, ProjectPriority priority, ProjectVisibility visibility, boolean archived, LocalDate startDate, LocalDate endDate, User owner) {
@@ -109,6 +121,18 @@ public class Project extends BaseEntity {
     public User getOwner() { return owner; }
     public void setOwner(User owner) { this.owner = owner; }
 
+    public boolean isAiGenerated() { return aiGenerated; }
+    public void setAiGenerated(boolean aiGenerated) { this.aiGenerated = aiGenerated; }
+
+    public String getPhase() { return phase; }
+    public void setPhase(String phase) { this.phase = phase; }
+
+    public String getTeamSize() { return teamSize; }
+    public void setTeamSize(String teamSize) { this.teamSize = teamSize; }
+
+    public String getTechStack() { return techStack; }
+    public void setTechStack(String techStack) { this.techStack = techStack; }
+
     public static ProjectBuilder builder() {
         return new ProjectBuilder();
     }
@@ -125,6 +149,10 @@ public class Project extends BaseEntity {
         private LocalDate startDate;
         private LocalDate endDate;
         private User owner;
+        private boolean aiGenerated = false;
+        private String phase;
+        private String teamSize;
+        private String techStack;
 
         public ProjectBuilder id(Long id) { this.id = id; return this; }
         public ProjectBuilder name(String name) { this.name = name; return this; }
@@ -137,9 +165,18 @@ public class Project extends BaseEntity {
         public ProjectBuilder startDate(LocalDate startDate) { this.startDate = startDate; return this; }
         public ProjectBuilder endDate(LocalDate endDate) { this.endDate = endDate; return this; }
         public ProjectBuilder owner(User owner) { this.owner = owner; return this; }
+        public ProjectBuilder aiGenerated(boolean aiGenerated) { this.aiGenerated = aiGenerated; return this; }
+        public ProjectBuilder phase(String phase) { this.phase = phase; return this; }
+        public ProjectBuilder teamSize(String teamSize) { this.teamSize = teamSize; return this; }
+        public ProjectBuilder techStack(String techStack) { this.techStack = techStack; return this; }
 
         public Project build() {
-            return new Project(id, name, projectKey, description, status, priority, visibility, archived, startDate, endDate, owner);
+            Project project = new Project(id, name, projectKey, description, status, priority, visibility, archived, startDate, endDate, owner);
+            project.setAiGenerated(aiGenerated);
+            project.setPhase(phase);
+            project.setTeamSize(teamSize);
+            project.setTechStack(techStack);
+            return project;
         }
     }
 

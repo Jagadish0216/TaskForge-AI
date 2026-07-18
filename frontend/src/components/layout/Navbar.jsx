@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Menu, Search, Bell, Sun, Moon, Monitor } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../context/ThemeContext';
-import { getInitials } from '../../utils/formatters';
+import { getInitials, getAvatarUrl } from '../../utils/formatters';
 import NotificationDropdown from '../notifications/NotificationDropdown';
 
 export const Navbar = ({ onOpenSidebar }) => {
@@ -92,9 +92,17 @@ export const Navbar = ({ onOpenSidebar }) => {
             onClick={() => navigate('/profile')}
             className="flex items-center gap-2.5 p-1 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-              {getInitials(user?.name || user?.email)}
-            </div>
+            {user?.avatarUrl ? (
+              <img
+                src={getAvatarUrl(user.avatarUrl)}
+                alt="Avatar"
+                className="w-8 h-8 rounded-full object-cover shadow-sm"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                {getInitials(user?.name || user?.email)}
+              </div>
+            )}
             <div className="hidden sm:block text-left pr-2">
               <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 leading-tight">
                 {user?.name || 'User Profile'}
