@@ -145,12 +145,9 @@ public class NotificationService {
     }
 
     public User getCurrentAuthenticatedUser() {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        if (email != null) {
-            return userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
-        }
-        return userRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("Authentication required"));
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
     }
 }

@@ -642,24 +642,18 @@ public class TaskService {
     }
 
     private User getCurrentAuthenticatedUser() {
-        return getCurrentAuthenticatedUser(null);
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated"));
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
     }
 
     private User getCurrentAuthenticatedUser(Project project) {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        if (email != null) {
-            return userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
-        }
-        if (project != null && project.getOwner() != null) {
-            return project.getOwner();
-        }
-        return userRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
+        return getCurrentAuthenticatedUser();
     }
 
     private void verifyReadAccess(Task task) {
-        User currentUser = getCurrentAuthenticatedUser(task.getProject());
+        User currentUser = getCurrentAuthenticatedUser();
         boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
         if (isAdmin) {
             return;
@@ -672,7 +666,7 @@ public class TaskService {
     }
 
     private void verifyAccess(Project project) {
-        User currentUser = getCurrentAuthenticatedUser(project);
+        User currentUser = getCurrentAuthenticatedUser();
         boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
         if (isAdmin) {
             return;
@@ -700,7 +694,7 @@ public class TaskService {
     }
 
     private void verifyModificationAccess(Project project) {
-        User currentUser = getCurrentAuthenticatedUser(project);
+        User currentUser = getCurrentAuthenticatedUser();
 
         boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
         if (isAdmin) {

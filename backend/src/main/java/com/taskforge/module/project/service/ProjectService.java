@@ -345,7 +345,7 @@ public class ProjectService {
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + id));
 
-        verifyModificationAccess(project);
+        verifyOwnerAccess(project);
 
         List<com.taskforge.module.activity.entity.ActivityLog> activities = activityLogRepository.findByProject(project);
         activityLogRepository.deleteAll(activities);
@@ -424,24 +424,14 @@ public class ProjectService {
     }
 
     private User getCurrentAuthenticatedUser() {
-        return getCurrentAuthenticatedUser(null);
-    }
-
-    private User getCurrentAuthenticatedUser(Project project) {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        if (email != null) {
-            return userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
-        }
-        if (project != null && project.getOwner() != null) {
-            return project.getOwner();
-        }
-        return userRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated"));
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
     }
 
     private void verifyAccess(Project project) {
-        User currentUser = getCurrentAuthenticatedUser(project);
+        User currentUser = getCurrentAuthenticatedUser();
 
         boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
         if (isAdmin) {
@@ -470,26 +460,31 @@ public class ProjectService {
     }
 
     private void verifyModificationAccess(Project project) {
-        User currentUser = getCurrentAuthenticatedUser(project);
+        User currentUser = getCurrentAuthenticatedUser();
 
         boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
         if (isAdmin) {
             return;
         }
 
-        boolean isPM = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_PROJECT_MANAGER);
-        if (isPM) {
-            ProjectMember member = projectMemberRepository.findByProjectAndUser(project, currentUser).orElse(null);
-            if (member != null && (member.getRole() == com.taskforge.common.constant.ProjectMemberRole.OWNER || member.getRole() == com.taskforge.common.constant.ProjectMemberRole.MANAGER)) {
-                return;
-            }
-            throw new UnauthorizedAccessException("Project Managers can only modify projects they own or manage");
-        }
+        ProjectMember member = projectMemberRepository.findByProjectAndUser(project, currentUser)
+                .orElseThrow(() -> new UnauthorizedAccessException("You do not have permission to modify this project"));
 
-        if (project.getOwner().getId().equals(currentUser.getId())) {
+        if (member.getRole() != com.taskforge.common.constant.ProjectMemberRole.OWNER && member.getRole() != com.taskforge.common.constant.ProjectMemberRole.MANAGER) {
+            throw new UnauthorizedAccessException("Only Project Owner, Manager, or Admin can modify this project");
+        }
+    }
+
+    private void verifyOwnerAccess(Project project) {
+        User currentUser = getCurrentAuthenticatedUser();
+
+        boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);
+        if (isAdmin) {
             return;
         }
 
-        throw new UnauthorizedAccessException("You do not have permission to modify this project");
+        if (project.getOwner() == null || !project.getOwner().getId().equals(currentUser.getId())) {
+            throw new UnauthorizedAccessException("Only the Project Owner or Admin can delete a project");
+        }
     }
 }

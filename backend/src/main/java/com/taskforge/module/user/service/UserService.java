@@ -61,15 +61,10 @@ public class UserService {
      */
     @Transactional(readOnly = true)
     public UserResponse getCurrentUserProfile() {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        User user;
-        if (email != null) {
-            user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
-        } else {
-            user = userRepository.findAll().stream().findFirst()
-                    .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
-        }
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("Authentication required"));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
         return userMapper.toResponse(user);
     }
 
@@ -81,15 +76,10 @@ public class UserService {
      */
     @Transactional
     public UserResponse updateCurrentUserProfile(UpdateUserRequest request) {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        User user;
-        if (email != null) {
-            user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
-        } else {
-            user = userRepository.findAll().stream().findFirst()
-                    .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
-        }
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("Authentication required"));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
 
         user.setFirstName(request.firstName());
         user.setLastName(request.lastName());
@@ -281,15 +271,10 @@ public class UserService {
 
     @Transactional
     public UserResponse uploadUserAvatar(MultipartFile file) {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        User user;
-        if (email != null) {
-            user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
-        } else {
-            user = userRepository.findAll().stream().findFirst()
-                    .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
-        }
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("Authentication required"));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
 
         String uniqueName = storageService.store(file);
         user.setAvatarUrl("/uploads/" + uniqueName);

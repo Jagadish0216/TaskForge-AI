@@ -275,16 +275,14 @@ public class ActivityService {
     }
 
     private User getCurrentAuthenticatedUser(Project project) {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        if (email != null) {
-            return userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
-        }
-        if (project != null && project.getOwner() != null) {
-            return project.getOwner();
-        }
-        return userRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
+        return getAuthenticatedUser(project);
+    }
+
+    public User getAuthenticatedUser(Project project) {
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("Authentication required"));
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
     }
 
     private User getAuthenticatedUserOrNull() {
@@ -292,7 +290,7 @@ public class ActivityService {
         if (email != null) {
             return userRepository.findByEmail(email).orElse(null);
         }
-        return userRepository.findAll().stream().findFirst().orElse(null);
+        return null;
     }
 
     private void verifyReadAccess(Project project, User currentUser) {

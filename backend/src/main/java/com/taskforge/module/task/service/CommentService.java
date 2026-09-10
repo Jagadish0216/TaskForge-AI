@@ -14,6 +14,7 @@ import com.taskforge.module.task.entity.Task;
 import com.taskforge.module.task.mapper.CommentMapper;
 import com.taskforge.module.task.repository.CommentHistoryRepository;
 import com.taskforge.module.task.repository.CommentRepository;
+import com.taskforge.module.project.repository.ProjectMemberRepository;
 import com.taskforge.module.task.repository.TaskRepository;
 import com.taskforge.module.user.entity.User;
 import com.taskforge.module.user.repository.UserRepository;
@@ -38,6 +39,7 @@ public class CommentService {
     private final CommentHistoryRepository commentHistoryRepository;
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final CommentMapper commentMapper;
     private final ActivityService activityService;
     private final NotificationService notificationService;
@@ -47,6 +49,7 @@ public class CommentService {
             CommentHistoryRepository commentHistoryRepository,
             TaskRepository taskRepository,
             UserRepository userRepository,
+            ProjectMemberRepository projectMemberRepository,
             CommentMapper commentMapper,
             ActivityService activityService,
             NotificationService notificationService
@@ -55,6 +58,7 @@ public class CommentService {
         this.commentHistoryRepository = commentHistoryRepository;
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
+        this.projectMemberRepository = projectMemberRepository;
         this.commentMapper = commentMapper;
         this.activityService = activityService;
         this.notificationService = notificationService;
@@ -69,7 +73,8 @@ public class CommentService {
         Task task = taskRepository.findById(request.taskId())
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + request.taskId()));
 
-        User author = getCurrentAuthenticatedUser(task.getProject());
+        User author = getCurrentAuthenticatedUser();
+        verifyProjectWriteAccess(task.getProject(), author);
 
         Comment parent = null;
         if (request.parentCommentId() != null) {
@@ -125,7 +130,9 @@ public class CommentService {
             throw new InvalidStateException("Cannot update a deleted comment");
         }
 
-        User currentUser = getCurrentAuthenticatedUser(comment.getTask().getProject());
+        User currentUser = getCurrentAuthenticatedUser();
+        verifyProjectWriteAccess(comment.getTask().getProject(), currentUser);
+
         if (!comment.getAuthor().getId().equals(currentUser.getId())) {
             throw new UnauthorizedAccessException("You can only edit comments you authored");
         }
@@ -154,11 +161,14 @@ public class CommentService {
         Comment comment = commentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + id));
 
-        User currentUser = getCurrentAuthenticatedUser(comment.getTask().getProject());
-        boolean isOwner = comment.getTask().getProject().getOwner().getId().equals(currentUser.getId());
+        User currentUser = getCurrentAuthenticatedUser();
+        boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == com.taskforge.common.constant.UserRole.ROLE_ADMIN);
         boolean isAuthor = comment.getAuthor().getId().equals(currentUser.getId());
 
-        if (!isAuthor && !isOwner) {
+        com.taskforge.module.project.entity.ProjectMember member = projectMemberRepository.findByProjectAndUser(comment.getTask().getProject(), currentUser).orElse(null);
+        boolean isProjectManager = member != null && (member.getRole() == com.taskforge.common.constant.ProjectMemberRole.OWNER || member.getRole() == com.taskforge.common.constant.ProjectMemberRole.MANAGER);
+
+        if (!isAuthor && !isProjectManager && !isAdmin) {
             throw new UnauthorizedAccessException("You do not have permission to delete this comment");
         }
 
@@ -168,17 +178,23 @@ public class CommentService {
 
     @Transactional(readOnly = true)
     public Page<CommentResponse> searchComments(CommentSearchRequest searchRequest, Pageable pageable) {
+        User currentUser = getCurrentAuthenticatedUser();
         List<Comment> comments;
+
         if (searchRequest.taskId() != null) {
             Task task = taskRepository.findById(searchRequest.taskId())
                     .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + searchRequest.taskId()));
+            verifyProjectReadAccess(task.getProject(), currentUser);
+
             if (searchRequest.includeDeleted() != null && searchRequest.includeDeleted()) {
                 comments = commentRepository.findByTask(task);
             } else {
                 comments = commentRepository.findByTaskAndDeletedFalse(task);
             }
         } else {
-            comments = commentRepository.findAll();
+            comments = commentRepository.findAll().stream()
+                    .filter(c -> isProjectMemberOrAdmin(c.getTask().getProject(), currentUser))
+                    .toList();
         }
 
         if (StringUtils.hasText(searchRequest.keyword())) {
@@ -208,6 +224,10 @@ public class CommentService {
 
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
+
+        User currentUser = getCurrentAuthenticatedUser();
+        verifyProjectReadAccess(comment.getTask().getProject(), currentUser);
+
         List<CommentHistory> history = commentHistoryRepository.findByCommentOrderByEditedAtDesc(comment);
         return commentMapper.toHistoryResponseList(history);
     }
@@ -230,16 +250,39 @@ public class CommentService {
         }
     }
 
-    private User getCurrentAuthenticatedUser(com.taskforge.module.project.entity.Project project) {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        if (email != null) {
-            return userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
+    private User getCurrentAuthenticatedUser() {
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated"));
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
+    }
+
+    private void verifyProjectReadAccess(com.taskforge.module.project.entity.Project project, User user) {
+        if (isProjectMemberOrAdmin(project, user)) {
+            return;
         }
-        if (project != null && project.getOwner() != null) {
-            return project.getOwner();
+        throw new UnauthorizedAccessException("You do not have permission to access comments in this project");
+    }
+
+    private void verifyProjectWriteAccess(com.taskforge.module.project.entity.Project project, User user) {
+        boolean isAdmin = user.getRoles().stream().anyMatch(r -> r.getName() == com.taskforge.common.constant.UserRole.ROLE_ADMIN);
+        if (isAdmin) {
+            return;
         }
-        return userRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
+
+        com.taskforge.module.project.entity.ProjectMember member = projectMemberRepository.findByProjectAndUser(project, user)
+                .orElseThrow(() -> new UnauthorizedAccessException("You do not have permission to access comments in this project"));
+
+        if (member.getRole() == com.taskforge.common.constant.ProjectMemberRole.VIEWER) {
+            throw new UnauthorizedAccessException("Viewers have read-only access to this project");
+        }
+    }
+
+    private boolean isProjectMemberOrAdmin(com.taskforge.module.project.entity.Project project, User user) {
+        boolean isAdmin = user.getRoles().stream().anyMatch(r -> r.getName() == com.taskforge.common.constant.UserRole.ROLE_ADMIN);
+        if (isAdmin) {
+            return true;
+        }
+        return projectMemberRepository.existsByProjectAndUser(project, user);
     }
 }

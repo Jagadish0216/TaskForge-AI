@@ -32,15 +32,10 @@ public class SystemSettingController {
     }
 
     private void verifyAdmin() {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        User user;
-        if (email != null) {
-            user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found"));
-        } else {
-            user = userRepository.findAll().stream().findFirst()
-                    .orElseThrow(() -> new UnauthorizedAccessException("Not authenticated"));
-        }
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("Authentication required"));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found"));
 
         boolean isAdmin = user.getRoles().stream()
                 .anyMatch(r -> r.getName() == UserRole.ROLE_ADMIN);

@@ -34,11 +34,8 @@ public class ProjectMessageService {
     }
 
     private User getAuthenticatedUser() {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        if (email == null) {
-            return userRepository.findAll().stream().findFirst()
-                    .orElseThrow(() -> new UnauthorizedAccessException("Not authenticated"));
-        }
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated"));
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User profile not found: " + email));
     }

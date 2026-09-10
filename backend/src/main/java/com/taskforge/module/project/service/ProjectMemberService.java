@@ -450,20 +450,14 @@ public class ProjectMemberService {
     }
 
     private User getCurrentAuthenticatedUser() {
-        return getCurrentAuthenticatedUser(null);
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated"));
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
     }
 
     private User getCurrentAuthenticatedUser(Project project) {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        if (email != null) {
-            return userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
-        }
-        if (project != null && project.getOwner() != null) {
-            return project.getOwner();
-        }
-        return userRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
+        return getCurrentAuthenticatedUser();
     }
 
     private void verifyReadAccess(Project project, User currentUser) {

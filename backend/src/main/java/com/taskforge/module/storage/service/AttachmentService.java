@@ -14,6 +14,7 @@ import com.taskforge.module.task.entity.Task;
 import com.taskforge.module.task.repository.TaskRepository;
 import com.taskforge.module.user.entity.User;
 import com.taskforge.module.user.repository.UserRepository;
+import com.taskforge.module.project.repository.ProjectMemberRepository;
 import com.taskforge.security.SecurityUtils;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class AttachmentService {
     private final ProjectRepository projectRepository;
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final StorageService storageService;
     private final AttachmentMapper attachmentMapper;
     private final ActivityService activityService;
@@ -38,6 +40,7 @@ public class AttachmentService {
             ProjectRepository projectRepository,
             TaskRepository taskRepository,
             UserRepository userRepository,
+            ProjectMemberRepository projectMemberRepository,
             StorageService storageService,
             AttachmentMapper attachmentMapper,
             ActivityService activityService
@@ -46,6 +49,7 @@ public class AttachmentService {
         this.projectRepository = projectRepository;
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
+        this.projectMemberRepository = projectMemberRepository;
         this.storageService = storageService;
         this.attachmentMapper = attachmentMapper;
         this.activityService = activityService;
@@ -68,7 +72,12 @@ public class AttachmentService {
             }
         }
 
-        User uploader = getCurrentAuthenticatedUser(project);
+        if (project == null) {
+            throw new ResourceNotFoundException("Project reference is required to upload attachments");
+        }
+
+        User uploader = getCurrentAuthenticatedUser();
+        verifyProjectWriteAccess(project, uploader);
 
         String uniqueName = storageService.store(file);
 
@@ -102,6 +111,10 @@ public class AttachmentService {
 
         Attachment attachment = attachmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment not found with id: " + id));
+
+        User currentUser = getCurrentAuthenticatedUser();
+        verifyProjectReadAccess(attachment.getProject(), currentUser);
+
         return storageService.loadAsResource(attachment.getFilePath());
     }
 
@@ -113,6 +126,10 @@ public class AttachmentService {
 
         Attachment attachment = attachmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment not found with id: " + id));
+
+        User currentUser = getCurrentAuthenticatedUser();
+        verifyProjectReadAccess(attachment.getProject(), currentUser);
+
         return attachmentMapper.toResponse(attachment);
     }
 
@@ -125,8 +142,18 @@ public class AttachmentService {
         Attachment attachment = attachmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Attachment not found with id: " + id));
 
-        storageService.delete(attachment.getFilePath());
+        User currentUser = getCurrentAuthenticatedUser();
+        boolean isAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName() == com.taskforge.common.constant.UserRole.ROLE_ADMIN);
+        boolean isUploader = attachment.getUploadedBy() != null && attachment.getUploadedBy().getId().equals(currentUser.getId());
 
+        com.taskforge.module.project.entity.ProjectMember member = projectMemberRepository.findByProjectAndUser(attachment.getProject(), currentUser).orElse(null);
+        boolean isProjectManager = member != null && (member.getRole() == com.taskforge.common.constant.ProjectMemberRole.OWNER || member.getRole() == com.taskforge.common.constant.ProjectMemberRole.MANAGER);
+
+        if (!isUploader && !isProjectManager && !isAdmin) {
+            throw new UnauthorizedAccessException("You do not have permission to delete this attachment");
+        }
+
+        storageService.delete(attachment.getFilePath());
         attachmentRepository.delete(attachment);
     }
 
@@ -138,6 +165,10 @@ public class AttachmentService {
 
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + taskId));
+
+        User currentUser = getCurrentAuthenticatedUser();
+        verifyProjectReadAccess(task.getProject(), currentUser);
+
         List<Attachment> list = attachmentRepository.findByTask(task);
         return attachmentMapper.toResponseList(list);
     }
@@ -150,20 +181,41 @@ public class AttachmentService {
 
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
+
+        User currentUser = getCurrentAuthenticatedUser();
+        verifyProjectReadAccess(project, currentUser);
+
         List<Attachment> list = attachmentRepository.findByProject(project);
         return attachmentMapper.toResponseList(list);
     }
 
-    private User getCurrentAuthenticatedUser(Project project) {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        if (email != null) {
-            return userRepository.findByEmail(email)
-                    .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
+    private User getCurrentAuthenticatedUser() {
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated"));
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
+    }
+
+    private void verifyProjectReadAccess(Project project, User user) {
+        boolean isAdmin = user.getRoles().stream().anyMatch(r -> r.getName() == com.taskforge.common.constant.UserRole.ROLE_ADMIN);
+        if (isAdmin) {
+            return;
         }
-        if (project != null && project.getOwner() != null) {
-            return project.getOwner();
+        projectMemberRepository.findByProjectAndUser(project, user)
+                .orElseThrow(() -> new UnauthorizedAccessException("You do not have permission to access attachments in this project"));
+    }
+
+    private void verifyProjectWriteAccess(Project project, User user) {
+        boolean isAdmin = user.getRoles().stream().anyMatch(r -> r.getName() == com.taskforge.common.constant.UserRole.ROLE_ADMIN);
+        if (isAdmin) {
+            return;
         }
-        return userRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated or exists in database"));
+
+        com.taskforge.module.project.entity.ProjectMember member = projectMemberRepository.findByProjectAndUser(project, user)
+                .orElseThrow(() -> new UnauthorizedAccessException("You do not have permission to access attachments in this project"));
+
+        if (member.getRole() == com.taskforge.common.constant.ProjectMemberRole.VIEWER) {
+            throw new UnauthorizedAccessException("Viewers have read-only access to this project");
+        }
     }
 }

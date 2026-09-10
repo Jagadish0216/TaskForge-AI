@@ -30,11 +30,8 @@ public class AnnouncementController {
     }
 
     private User getAuthenticatedUser() {
-        String email = SecurityUtils.getCurrentUserUsername().orElse(null);
-        if (email == null) {
-            return userRepository.findAll().stream().findFirst()
-                    .orElseThrow(() -> new UnauthorizedAccessException("Not authenticated"));
-        }
+        String email = SecurityUtils.getCurrentUserUsername()
+                .orElseThrow(() -> new UnauthorizedAccessException("Authentication required"));
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + email));
     }
