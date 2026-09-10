@@ -6,7 +6,6 @@ import com.taskforge.module.auth.dto.GoogleLoginRequest;
 import com.taskforge.module.auth.service.AuthenticationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,11 +32,9 @@ public class GoogleAuthController {
      * @return auth response wrapped in ApiResponse
      */
     @PostMapping("/google")
-    @Operation(summary = "Authenticate with Google OAuth 2.0", description = "Verifies Google ID Token and establishes user session.")
-    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(
-            @Valid @RequestBody GoogleLoginRequest request,
-            HttpServletRequest httpRequest) {
-        AuthResponse response = authenticationService.googleLogin(request.idToken(), httpRequest);
+    @Operation(summary = "Authenticate with Google OAuth 2.0", description = "Verifies Google ID Token and returns JWT tokens.")
+    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+        AuthResponse response = authenticationService.googleLogin(request.idToken());
         return ResponseEntity.ok(ApiResponse.success(response, "Google Sign-In Successful"));
     }
 }

@@ -14,13 +14,30 @@ export const AuthProvider = ({ children }) => {
     return { ...userData, name };
   };
 
+  const handleTokens = (authData) => {
+    if (authData?.accessToken) {
+      localStorage.setItem('accessToken', authData.accessToken);
+    }
+    if (authData?.refreshToken) {
+      localStorage.setItem('refreshToken', authData.refreshToken);
+    }
+  };
+
   const fetchCurrentUser = async () => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
     try {
       const response = await authService.getCurrentUser();
       const rawUser = response.data || response;
       setUser(normalizeUser(rawUser));
     } catch (err) {
       setUser(null);
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
     } finally {
       setLoading(false);
     }
@@ -32,10 +49,21 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const response = await authService.login({ email, password });
-    const rawUser = response.data || response;
-    const normalized = normalizeUser(rawUser);
+    const rawData = response.data || response;
+    handleTokens(rawData);
+    const normalized = normalizeUser(rawData);
     setUser(normalized);
     toast.success('Welcome back to TaskForge AI!');
+    return normalized;
+  };
+
+  const googleLogin = async (idToken) => {
+    const response = await authService.googleLogin(idToken);
+    const rawData = response.data || response;
+    handleTokens(rawData);
+    const normalized = normalizeUser(rawData);
+    setUser(normalized);
+    toast.success('Signed in with Google!');
     return normalized;
   };
 
@@ -48,7 +76,13 @@ export const AuthProvider = ({ children }) => {
       role,
     });
     const rawUser = response.data || response;
-    const normalized = normalizeUser(rawUser);
+
+    // Automatically log in after registration to acquire JWT tokens
+    const loginResponse = await authService.login({ email, password });
+    const rawLoginData = loginResponse.data || loginResponse;
+    handleTokens(rawLoginData);
+
+    const normalized = normalizeUser(rawLoginData || rawUser);
     setUser(normalized);
     toast.success('Account created successfully!');
     return normalized;
@@ -60,6 +94,8 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       // Ignore logout errors
     } finally {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
       setUser(null);
       toast.success('Logged out successfully');
     }
@@ -72,6 +108,7 @@ export const AuthProvider = ({ children }) => {
         setUser,
         loading,
         login,
+        googleLogin,
         register,
         logout,
         refreshUser: fetchCurrentUser,

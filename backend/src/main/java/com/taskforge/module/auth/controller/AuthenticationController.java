@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/auth")
-@Tag(name = "Authentication Module", description = "Endpoints for managing user authentication, sessions, and credentials")
+@Tag(name = "Authentication Module", description = "Endpoints for managing user authentication, JWT tokens, and credentials")
 public class AuthenticationController {
 
     private final AuthenticationService authenticationService;
@@ -39,31 +39,53 @@ public class AuthenticationController {
     }
 
     /**
-     * Authenticates user credentials.
+     * Authenticates user credentials and issues JWT access & refresh tokens.
      *
      * @param request the login credentials
-     * @param httpRequest current servlet request
-     * @return auth response containing user details wrapped in ApiResponse
+     * @return auth response containing user details and JWT tokens wrapped in ApiResponse
      */
     @PostMapping("/login")
-    @Operation(summary = "Authenticate user", description = "Verifies email and password to establish HTTP Session.")
-    public ResponseEntity<ApiResponse<AuthResponse>> login(
-            @Valid @RequestBody LoginRequest request,
-            jakarta.servlet.http.HttpServletRequest httpRequest) {
-        AuthResponse response = authenticationService.login(request, httpRequest);
+    @Operation(summary = "Authenticate user", description = "Verifies email and password, returning JWT access and refresh tokens.")
+    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
+        AuthResponse response = authenticationService.login(request);
         return ResponseEntity.ok(ApiResponse.success(response, "Login Successful"));
     }
 
     /**
-     * Invalidates the active session and logs out the user.
+     * Refreshes JWT access token using a valid refresh token.
      *
-     * @param httpRequest current servlet request
+     * @param request the refresh token payload
+     * @return auth response containing new JWT access and refresh tokens
+     */
+    @PostMapping("/refresh")
+    @Operation(summary = "Refresh JWT Access Token", description = "Issues a new JWT access token using a valid JWT refresh token.")
+    public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        AuthResponse response = authenticationService.refreshToken(request.refreshToken());
+        return ResponseEntity.ok(ApiResponse.success(response, "Token refreshed successfully"));
+    }
+
+    /**
+     * Validates a JWT token.
+     *
+     * @param token Bearer token string
+     * @return current user profile if valid
+     */
+    @GetMapping("/validate")
+    @Operation(summary = "Validate JWT Token", description = "Verifies if the provided JWT token is valid and returns user profile.")
+    public ResponseEntity<ApiResponse<CurrentUserResponse>> validate(@RequestParam("token") String token) {
+        CurrentUserResponse response = authenticationService.validateToken(token);
+        return ResponseEntity.ok(ApiResponse.success(response, "Token is valid"));
+    }
+
+    /**
+     * Logs out the user.
+     *
      * @return success wrapped in ApiResponse
      */
     @PostMapping("/logout")
-    @Operation(summary = "Logout user", description = "Invalidates the current user session.")
-    public ResponseEntity<ApiResponse<Void>> logout(jakarta.servlet.http.HttpServletRequest httpRequest) {
-        authenticationService.logout(httpRequest);
+    @Operation(summary = "Logout user", description = "Discards user authentication session.")
+    public ResponseEntity<ApiResponse<Void>> logout() {
+        authenticationService.logout();
         return ResponseEntity.ok(ApiResponse.success(null, "Logout successful"));
     }
 
