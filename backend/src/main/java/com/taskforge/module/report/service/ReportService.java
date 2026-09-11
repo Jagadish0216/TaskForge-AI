@@ -2,7 +2,6 @@ package com.taskforge.module.report.service;
 
 import com.taskforge.common.constant.TaskStatus;
 import com.taskforge.common.exception.ResourceNotFoundException;
-import com.taskforge.common.exception.UnauthorizedAccessException;
 import com.taskforge.module.project.entity.Project;
 import com.taskforge.module.project.repository.ProjectMemberRepository;
 import com.taskforge.module.project.repository.ProjectRepository;
@@ -15,11 +14,12 @@ import com.taskforge.module.task.mapper.TaskMapper;
 import com.taskforge.module.task.repository.TaskRepository;
 import com.taskforge.module.user.entity.User;
 import com.taskforge.module.user.repository.UserRepository;
-import com.taskforge.security.SecurityUtils;
+import com.taskforge.security.ProjectAuthorizationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -30,19 +30,22 @@ public class ReportService {
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final TaskMapper taskMapper;
+    private final ProjectAuthorizationService projectAuthorizationService;
 
     public ReportService(
             ProjectRepository projectRepository,
             TaskRepository taskRepository,
             ProjectMemberRepository projectMemberRepository,
             UserRepository userRepository,
-            TaskMapper taskMapper
+            TaskMapper taskMapper,
+            ProjectAuthorizationService projectAuthorizationService
     ) {
         this.projectRepository = projectRepository;
         this.taskRepository = taskRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.userRepository = userRepository;
         this.taskMapper = taskMapper;
+        this.projectAuthorizationService = projectAuthorizationService;
     }
 
     @Transactional(readOnly = true)
@@ -50,16 +53,13 @@ public class ReportService {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
-        // Check permission fallback
-        getCurrentAuthenticatedUser(project);
+        User currentUser = projectAuthorizationService.getAuthenticatedUser();
+        projectAuthorizationService.verifyProjectReadAccess(project, currentUser);
 
-        List<Task> tasks = taskRepository.findAll().stream().filter(t -> t.getProject().getId().equals(projectId)).toList();
-        long totalTasks = tasks.size();
-        long completedTasks = tasks.stream().filter(t -> t.getStatus() == TaskStatus.DONE).count();
+        long totalTasks = taskRepository.countByProject(project);
+        long completedTasks = taskRepository.countByProjectAndStatus(project, TaskStatus.DONE);
         long pendingTasks = totalTasks - completedTasks;
-        long overdueTasks = tasks.stream()
-                .filter(t -> t.getStatus() != TaskStatus.DONE && t.getDueDate() != null && t.getDueDate().isBefore(LocalDate.now()))
-                .count();
+        long overdueTasks = taskRepository.countByProjectAndStatusNotAndDueDateBefore(project, TaskStatus.DONE, LocalDate.now());
 
         double completionRate = 0.0;
         if (totalTasks > 0) {
@@ -85,27 +85,22 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public UserReportResponse generateUserReport(Long userId) {
+        projectAuthorizationService.getAuthenticatedUser();
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
-        List<Task> tasks = taskRepository.findAll().stream()
-                .filter(t -> t.getAssignee() != null && t.getAssignee().getId().equals(userId))
-                .toList();
-
-        long totalAssignedTasks = tasks.size();
-        long completedTasks = tasks.stream().filter(t -> t.getStatus() == TaskStatus.DONE).count();
+        long totalAssignedTasks = taskRepository.countByAssignee(user);
+        long completedTasks = taskRepository.countByAssigneeAndStatus(user, TaskStatus.DONE);
         long pendingTasks = totalAssignedTasks - completedTasks;
-        long overdueTasks = tasks.stream()
-                .filter(t -> t.getStatus() != TaskStatus.DONE && t.getDueDate() != null && t.getDueDate().isBefore(LocalDate.now()))
-                .count();
+        long overdueTasks = taskRepository.countByAssigneeAndStatusNotAndDueDateBefore(user, TaskStatus.DONE, LocalDate.now());
 
         double completionRate = 0.0;
         if (totalAssignedTasks > 0) {
             completionRate = ((double) completedTasks / totalAssignedTasks) * 100.0;
         }
 
-        double estimatedHoursSum = tasks.stream().mapToDouble(t -> t.getEstimatedHours() != null ? t.getEstimatedHours() : 0.0).sum();
-        double actualHoursSum = tasks.stream().mapToDouble(t -> t.getActualHours() != null ? t.getActualHours() : 0.0).sum();
+        Double estimatedHoursSum = taskRepository.sumEstimatedHoursByAssignee(user);
+        Double actualHoursSum = taskRepository.sumActualHoursByAssignee(user);
 
         return new UserReportResponse(
                 user.getId(),
@@ -116,8 +111,8 @@ public class ReportService {
                 pendingTasks,
                 overdueTasks,
                 Math.round(completionRate * 100.0) / 100.0,
-                estimatedHoursSum,
-                actualHoursSum
+                estimatedHoursSum != null ? estimatedHoursSum : 0.0,
+                actualHoursSum != null ? actualHoursSum : 0.0
         );
     }
 
@@ -126,9 +121,10 @@ public class ReportService {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
-        getCurrentAuthenticatedUser(project);
+        User currentUser = projectAuthorizationService.getAuthenticatedUser();
+        projectAuthorizationService.verifyProjectReadAccess(project, currentUser);
 
-        List<Task> tasks = taskRepository.findAll().stream().filter(t -> t.getProject().getId().equals(projectId)).toList();
+        List<Task> tasks = taskRepository.findByProject(project);
         long totalTasks = tasks.size();
         long todo = tasks.stream().filter(t -> t.getStatus() == TaskStatus.TODO).count();
         long inProgress = tasks.stream().filter(t -> t.getStatus() == TaskStatus.IN_PROGRESS).count();
@@ -159,13 +155,11 @@ public class ReportService {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
-        getCurrentAuthenticatedUser(project);
+        User currentUser = projectAuthorizationService.getAuthenticatedUser();
+        projectAuthorizationService.verifyProjectReadAccess(project, currentUser);
 
-        LocalDate oneWeekAgo = LocalDate.now().minusWeeks(1);
-        List<Task> tasks = taskRepository.findAll().stream()
-                .filter(t -> t.getProject().getId().equals(projectId))
-                .filter(t -> t.getUpdatedAt() != null && !t.getUpdatedAt().toLocalDate().isBefore(oneWeekAgo))
-                .toList();
+        LocalDateTime oneWeekAgo = LocalDate.now().minusWeeks(1).atStartOfDay();
+        List<Task> tasks = taskRepository.findByProjectAndUpdatedAtGreaterThanEqual(project, oneWeekAgo);
 
         long totalTasks = tasks.size();
         long todo = tasks.stream().filter(t -> t.getStatus() == TaskStatus.TODO).count();
@@ -197,13 +191,11 @@ public class ReportService {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found with id: " + projectId));
 
-        getCurrentAuthenticatedUser(project);
+        User currentUser = projectAuthorizationService.getAuthenticatedUser();
+        projectAuthorizationService.verifyProjectReadAccess(project, currentUser);
 
-        LocalDate oneMonthAgo = LocalDate.now().minusMonths(1);
-        List<Task> tasks = taskRepository.findAll().stream()
-                .filter(t -> t.getProject().getId().equals(projectId))
-                .filter(t -> t.getUpdatedAt() != null && !t.getUpdatedAt().toLocalDate().isBefore(oneMonthAgo))
-                .toList();
+        LocalDateTime oneMonthAgo = LocalDate.now().minusMonths(1).atStartOfDay();
+        List<Task> tasks = taskRepository.findByProjectAndUpdatedAtGreaterThanEqual(project, oneMonthAgo);
 
         long totalTasks = tasks.size();
         long todo = tasks.stream().filter(t -> t.getStatus() == TaskStatus.TODO).count();
@@ -228,16 +220,5 @@ public class ReportService {
                 actualHours,
                 taskResponses
         );
-    }
-
-    private User getCurrentAuthenticatedUser() {
-        String email = SecurityUtils.getCurrentUserUsername()
-                .orElseThrow(() -> new UnauthorizedAccessException("No user is currently authenticated"));
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("User profile not found with email: " + email));
-    }
-
-    private User getCurrentAuthenticatedUser(Project project) {
-        return getCurrentAuthenticatedUser();
     }
 }
