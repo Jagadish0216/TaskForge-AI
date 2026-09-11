@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, Search, Bell, Sun, Moon, Monitor } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../context/ThemeContext';
 import { getInitials, getAvatarUrl } from '../../utils/formatters';
+import { notificationService } from '../../services/services';
 import NotificationDropdown from '../notifications/NotificationDropdown';
 
 export const Navbar = ({ onOpenSidebar }) => {
@@ -12,6 +13,27 @@ export const Navbar = ({ onOpenSidebar }) => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    fetchUnreadCount();
+  }, []);
+
+  const fetchUnreadCount = async () => {
+    try {
+      if (notificationService.getUnreadCount) {
+        const res = await notificationService.getUnreadCount();
+        setUnreadCount(typeof res.data === 'number' ? res.data : res.data?.count || 0);
+      } else {
+        const res = await notificationService.getNotifications();
+        const list = res.data?.content || res.data || [];
+        const unread = list.filter((n) => !n.isRead).length;
+        setUnreadCount(unread);
+      }
+    } catch (err) {
+      setUnreadCount(0);
+    }
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -32,7 +54,9 @@ export const Navbar = ({ onOpenSidebar }) => {
         {/* Left: Mobile Toggle & Global Quick Search */}
         <div className="flex items-center gap-4 flex-1 max-w-xl">
           <button
+            type="button"
             onClick={onOpenSidebar}
+            aria-label="Open main navigation"
             className="p-2 text-slate-600 dark:text-slate-300 rounded-xl md:hidden hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <Menu className="w-5 h-5" />
@@ -57,9 +81,11 @@ export const Navbar = ({ onOpenSidebar }) => {
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Theme Switcher Button */}
           <button
+            type="button"
             onClick={toggleThemeMode}
+            aria-label={`Toggle theme (Current: ${theme})`}
             title={`Current Theme: ${theme.toUpperCase()}`}
-            className="p-2.5 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative"
+            className="p-2.5 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative cursor-pointer"
           >
             {theme === 'dark' ? (
               <Moon className="w-4 h-4 text-indigo-400" />
@@ -73,12 +99,17 @@ export const Navbar = ({ onOpenSidebar }) => {
           {/* Notifications Dropdown */}
           <div className="relative">
             <button
+              type="button"
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2.5 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              aria-label="Toggle notifications"
+              className="relative p-2.5 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
               <Bell className="w-4 h-4" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full ring-2 ring-white dark:ring-slate-900 animate-ping" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-blue-600 rounded-full ring-2 ring-white dark:ring-slate-900" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 flex items-center justify-center min-w-[16px] h-4 px-1 text-[10px] font-bold text-white bg-blue-600 rounded-full border-2 border-white dark:border-slate-900">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
             {showNotifications && (
               <NotificationDropdown onClose={() => setShowNotifications(false)} />
@@ -90,6 +121,9 @@ export const Navbar = ({ onOpenSidebar }) => {
           {/* User Profile Pill */}
           <div
             onClick={() => navigate('/profile')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/profile')}
             className="flex items-center gap-2.5 p-1 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             {user?.avatarUrl ? (

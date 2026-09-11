@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import {
   Folder,
   CheckSquare,
@@ -13,13 +12,9 @@ import {
   Sparkles,
   ArrowRight,
   Zap,
-  Layers,
-  Bot,
   AlertTriangle,
   UserPlus,
-  Upload,
   Check,
-  Award,
   PieChart as PieIcon,
   BarChart2,
 } from 'lucide-react';
@@ -36,7 +31,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { dashboardService, activityService, taskService, projectService, calendarService, announcementService } from '../services/services';
+import { dashboardService, activityService, taskService, projectService, announcementService } from '../services/services';
 import { useAuth } from '../hooks/useAuth';
 import Card from '../components/common/Card';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -149,8 +144,8 @@ export const Dashboard = () => {
   const totalTasksCount = summary?.totalTasks ?? upcomingTasks.length ?? 0;
   const completedTasksCount = summary?.completedTasks ?? upcomingTasks.filter(t => t.status === 'DONE').length ?? 0;
   const activeTasksCount = summary?.activeTasks ?? summary?.pendingTasks ?? upcomingTasks.filter(t => t.status !== 'DONE').length ?? 0;
-  const completionRate = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 85;
-  const overdueTasksCount = upcomingTasks.filter(t => t.status !== 'DONE' && new Date(t.dueDate) < new Date()).length;
+  const completionRate = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
+  const overdueTasksCount = upcomingTasks.filter(t => t.status !== 'DONE' && t.dueDate && new Date(t.dueDate) < new Date()).length;
 
   const currentDateStr = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -161,27 +156,27 @@ export const Dashboard = () => {
 
   // Recharts Data Sets
   const statusData = [
-    { name: 'To Do', value: summary?.tasksByStatus?.TODO || 4, color: '#94a3b8' },
-    { name: 'In Progress', value: summary?.tasksByStatus?.IN_PROGRESS || 6, color: '#3b82f6' },
-    { name: 'In Review', value: summary?.tasksByStatus?.IN_REVIEW || 2, color: '#f59e0b' },
-    { name: 'Done', value: summary?.tasksByStatus?.DONE || completedTasksCount || 8, color: '#10b981' },
+    { name: 'To Do', value: summary?.tasksByStatus?.TODO || 0, color: '#94a3b8' },
+    { name: 'In Progress', value: summary?.tasksByStatus?.IN_PROGRESS || 0, color: '#3b82f6' },
+    { name: 'In Review', value: summary?.tasksByStatus?.IN_REVIEW || 0, color: '#f59e0b' },
+    { name: 'Done', value: summary?.tasksByStatus?.DONE || completedTasksCount || 0, color: '#10b981' },
   ];
 
   const priorityData = [
-    { name: 'Low', count: summary?.tasksByPriority?.LOW || 3 },
-    { name: 'Medium', count: summary?.tasksByPriority?.MEDIUM || 7 },
-    { name: 'High', count: summary?.tasksByPriority?.HIGH || 5 },
-    { name: 'Urgent', count: summary?.tasksByPriority?.URGENT || 2 },
+    { name: 'Low', count: summary?.tasksByPriority?.LOW || 0 },
+    { name: 'Medium', count: summary?.tasksByPriority?.MEDIUM || 0 },
+    { name: 'High', count: summary?.tasksByPriority?.HIGH || 0 },
+    { name: 'Urgent', count: summary?.tasksByPriority?.URGENT || 0 },
   ];
 
   const velocityTrendData = [
-    { day: 'Mon', completed: 3, velocity: 12 },
-    { day: 'Tue', completed: 6, velocity: 18 },
-    { day: 'Wed', completed: 4, velocity: 15 },
-    { day: 'Thu', completed: 8, velocity: 24 },
-    { day: 'Fri', completed: 11, velocity: 30 },
-    { day: 'Sat', completed: 7, velocity: 22 },
-    { day: 'Sun', completed: completedTasksCount, velocity: 28 },
+    { day: 'Mon', velocity: 12 },
+    { day: 'Tue', velocity: 18 },
+    { day: 'Wed', velocity: 15 },
+    { day: 'Thu', velocity: 24 },
+    { day: 'Fri', velocity: 30 },
+    { day: 'Sat', velocity: 22 },
+    { day: 'Sun', velocity: completedTasksCount },
   ];
 
   return (
@@ -196,7 +191,7 @@ export const Dashboard = () => {
               </div>
               <div className="space-y-1">
                 <h4 className="text-sm font-bold text-white leading-tight">{ann.title}</h4>
-                <p className="text-xs text-slate-350 leading-relaxed">{ann.content}</p>
+                <p className="text-xs text-slate-300 leading-relaxed">{ann.content}</p>
               </div>
             </div>
           ))}
@@ -205,55 +200,49 @@ export const Dashboard = () => {
 
       {/* Hero Control Section */}
       <div className="relative p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 border border-slate-800 shadow-2xl overflow-hidden text-white backdrop-blur-xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-
         <div className="relative z-10 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-xs font-mono text-blue-400">
                 <span>{currentDateStr}</span>
                 <span>•</span>
-                <span>Acme SaaS Engineering</span>
+                <span>Workspace Dashboard</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
                 Welcome back, {user?.firstName || user?.name || 'Developer'}!
               </h1>
-            </div>
-
-            <div className="flex items-center gap-3 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800 font-mono shrink-0">
-              <Award className="w-5 h-5 text-amber-400" />
-              <div>
-                <span className="text-[10px] text-slate-400 block">AI PRODUCTIVITY SCORE</span>
-                <span className="text-sm font-bold text-emerald-400">94 / 100</span>
-              </div>
             </div>
           </div>
 
           {/* Quick Actions Toolbar */}
           <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-800/80">
             <button
+              type="button"
               onClick={() => setShowProjectModal(true)}
-              className="px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" /> New Project
             </button>
             <button
+              type="button"
               onClick={() => setShowTaskModal(true)}
-              className="px-3.5 py-2 text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" /> New Task
             </button>
             <button
+              type="button"
               onClick={() => navigate('/ai-workspace')}
-              className="px-3.5 py-2 text-xs font-semibold text-blue-300 bg-blue-950/60 border border-blue-800/60 hover:bg-blue-900/80 rounded-xl transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 text-xs font-semibold text-cyan-300 bg-cyan-950/60 border border-cyan-800/60 hover:bg-cyan-900/80 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              <Zap className="w-3.5 h-3.5 text-blue-400" /> AI Sprint Planner
+              <Zap className="w-3.5 h-3.5 text-cyan-400" /> AI Workspace
             </button>
             <button
+              type="button"
               onClick={() => navigate('/team')}
-              className="px-3.5 py-2 text-xs font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 rounded-xl transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 text-xs font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              <UserPlus className="w-3.5 h-3.5" /> Invite Member
+              <UserPlus className="w-3.5 h-3.5" /> Team Workspace
             </button>
           </div>
         </div>
@@ -310,7 +299,7 @@ export const Dashboard = () => {
         </Card>
 
         <Card className="flex items-center gap-3 p-4">
-          <div className="p-2.5 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 rounded-xl">
+          <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-xl">
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
@@ -335,36 +324,39 @@ export const Dashboard = () => {
       </div>
 
       {/* AI Insights Glass Cards */}
-      <Card className="p-5 border-l-4 border-l-blue-600 space-y-3 bg-gradient-to-r from-blue-900/10 via-indigo-900/10 to-transparent">
+      <Card className="p-5 border-l-4 border-l-cyan-500 space-y-3 bg-gradient-to-r from-cyan-950/10 via-blue-950/10 to-transparent">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-blue-500 animate-pulse" />
-            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">AI Executive Intelligence Summary</h3>
+            <Sparkles className="w-5 h-5 text-cyan-400" />
+            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Workspace Intelligence Summary</h3>
           </div>
           <button
+            type="button"
             onClick={() => navigate('/ai-workspace')}
-            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+            className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
           >
             Open AI Workspace <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
           <div className="p-3 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
-            <h4 className="font-bold text-slate-900 dark:text-slate-100">Velocity Forecast</h4>
+            <h4 className="font-bold text-slate-900 dark:text-slate-100">Completion Status</h4>
             <p className="text-slate-600 dark:text-slate-400 mt-0.5">
-              Sprint 1 completion is trending <span className="text-emerald-500 font-bold">14% ahead of schedule</span> based on daily commit merges.
+              Completion rate is currently <span className="text-emerald-500 font-bold">{completionRate}%</span> across all recorded tasks in your workspace.
             </p>
           </div>
           <div className="p-3 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
             <h4 className="font-bold text-slate-900 dark:text-slate-100">Backlog Allocation</h4>
             <p className="text-slate-600 dark:text-slate-400 mt-0.5">
-              {activeTasksCount} pending tasks detected. Reassigning REST API tests will balance team capacity.
+              {activeTasksCount} pending tasks active across {summary?.totalProjects ?? projects.length ?? 0} project workspace(s).
             </p>
           </div>
           <div className="p-3 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
             <h4 className="font-bold text-slate-900 dark:text-slate-100">Risk Assessment</h4>
             <p className="text-slate-600 dark:text-slate-400 mt-0.5">
-              {overdueTasksCount > 0 ? `${overdueTasksCount} overdue task requires urgent code review.` : 'Zero high-priority risk blockers detected across active projects.'}
+              {overdueTasksCount > 0
+                ? `${overdueTasksCount} overdue task(s) require attention.`
+                : 'Zero overdue task blockers detected in active tasks.'}
             </p>
           </div>
         </div>
@@ -439,7 +431,7 @@ export const Dashboard = () => {
               <TrendingUp className="w-4 h-4 text-emerald-500" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Velocity Curve</h3>
             </div>
-            <span className="text-[10px] font-mono text-emerald-500 font-bold">+24%</span>
+            <span className="text-[10px] font-mono text-slate-400">This Week</span>
           </div>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
@@ -461,11 +453,12 @@ export const Dashboard = () => {
           <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2">
               <Folder className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Active Workspaces & Projects</h3>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Active Projects</h3>
             </div>
             <button
+              type="button"
               onClick={() => navigate('/projects')}
-              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
             >
               View All ({projects.length}) <ArrowRight className="w-3.5 h-3.5" />
             </button>
@@ -475,27 +468,37 @@ export const Dashboard = () => {
             {projects.length === 0 ? (
               <p className="text-xs text-slate-400 py-6 text-center">No active projects created</p>
             ) : (
-              projects.slice(0, 4).map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => navigate(`/projects/${p.id}`)}
-                  className="p-3.5 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 cursor-pointer transition-all space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded">
-                        {p.key}
+              projects.slice(0, 4).map((p) => {
+                const tot = p.totalTasks || 0;
+                const comp = p.completedTasks || 0;
+                const pct = tot > 0 ? Math.round((comp / tot) * 100) : 0;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => navigate(`/projects/${p.id}`)}
+                    className="p-3.5 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 cursor-pointer transition-all space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded">
+                          {p.projectKey || p.key || 'PROJ'}
+                        </span>
+                        <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100">{p.name}</h4>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {tot > 0 ? `${comp}/${tot} (${pct}%)` : 'No tasks'}
                       </span>
-                      <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100">{p.name}</h4>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-400">Key: {p.key}</span>
-                  </div>
 
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-blue-600 h-full w-[70%]" />
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-full transition-all duration-300"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </Card>
@@ -508,8 +511,9 @@ export const Dashboard = () => {
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Upcoming Deliverables</h3>
             </div>
             <button
+              type="button"
               onClick={() => navigate('/tasks')}
-              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
             >
               View All Tasks <ArrowRight className="w-3.5 h-3.5" />
             </button>
@@ -534,9 +538,10 @@ export const Dashboard = () => {
 
                   <div className="flex items-center gap-2 shrink-0">
                     <button
+                      type="button"
                       onClick={(e) => handleQuickCompleteTask(t, e)}
                       title="Quick Complete"
-                      className="p-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-emerald-500 hover:text-white rounded-lg text-slate-600 dark:text-slate-300 transition-colors"
+                      className="p-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-emerald-500 hover:text-white rounded-lg text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                     >
                       <Check className="w-3.5 h-3.5" />
                     </button>
@@ -559,8 +564,9 @@ export const Dashboard = () => {
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">System Audit Feed</h3>
           </div>
           <button
+            type="button"
             onClick={() => navigate('/activity')}
-            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
           >
             Audit Center <ArrowRight className="w-3.5 h-3.5" />
           </button>

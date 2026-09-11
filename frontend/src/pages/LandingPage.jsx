@@ -51,9 +51,6 @@ export const LandingPage = () => {
             </div>
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-white text-lg tracking-tight">TaskForge AI</span>
-              <span className="px-2 py-0.5 text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full">
-                v2.5
-              </span>
             </div>
           </div>
 
@@ -170,9 +167,8 @@ export const LandingPage = () => {
                 <span className="text-xs font-mono text-slate-500 ml-2">app.taskforge.ai/workspace/sprint-alpha</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-1 text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  SYSTEM ONLINE
+                <span className="px-2.5 py-1 text-[10px] font-mono font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg">
+                  TaskForge Workspace
                 </span>
               </div>
             </div>

@@ -1,8 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 
 export const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }) => {
+  const modalRef = useRef(null);
+  const titleId = useId();
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onClose();
@@ -10,6 +13,9 @@ export const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' 
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', handleKeyDown);
+      setTimeout(() => {
+        modalRef.current?.focus();
+      }, 50);
     }
     return () => {
       document.body.style.overflow = 'auto';
@@ -32,16 +38,27 @@ export const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' 
 
           {/* Modal Container */}
           <motion.div
+            ref={modalRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={title ? titleId : undefined}
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className={`relative z-10 glass-card bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full ${maxWidth} overflow-hidden flex flex-col max-h-[90vh] border border-slate-200/80 dark:border-slate-800/80`}
+            className={`relative z-10 glass-card bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full ${maxWidth} overflow-hidden flex flex-col max-h-[90vh] border border-slate-200/80 dark:border-slate-800/80 focus:outline-none`}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{title}</h3>
+              {title && (
+                <h3 id={titleId} className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  {title}
+                </h3>
+              )}
               <button
+                type="button"
                 onClick={onClose}
+                aria-label="Close modal"
                 className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />

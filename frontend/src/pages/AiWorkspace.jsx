@@ -180,12 +180,12 @@ export const AiWorkspace = () => {
   };
 
   // SUGGESTED ACTION 2: Plan Sprint
-  const handleActionPlanSprint = async () => {
+  const handleActionPlanSprint = async (customSprintGoal) => {
     if (!selectedProjectId) {
       toast.error('Please select an active context project first');
       return;
     }
-    const sprintGoal = prompt('Enter sprint focus / goal (optional):', 'Complete core REST API endpoints and database setup');
+    const sprintGoal = customSprintGoal !== undefined ? customSprintGoal : 'Complete core REST API endpoints and database setup';
     setLoading(true);
     setStructuredOutput(null);
 
@@ -249,13 +249,12 @@ export const AiWorkspace = () => {
   };
 
   // SUGGESTED ACTION 4: Generate Documentation
-  const handleActionGenerateDocs = async () => {
+  const handleActionGenerateDocs = async (selectedDocType) => {
     if (!selectedProjectId) {
       toast.error('Please select an active context project first');
       return;
     }
-    const docType = prompt('Enter document type (README, API_DOCS, TECHNICAL_SPEC):', 'README');
-    if (!docType) return;
+    const docType = selectedDocType || 'README';
 
     setLoading(true);
     setStructuredOutput(null);

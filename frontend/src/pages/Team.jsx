@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Users, UserPlus, Shield, Search, Mail, Check, X, ArrowRight, Activity, Code, Layers, MessageSquare } from 'lucide-react';
+import { Users, UserPlus, Shield, Search, Mail, Check, X, ArrowRight, MessageSquare } from 'lucide-react';
 import Card from '../components/common/Card';
 import Modal from '../components/common/Modal';
+import EmptyState from '../components/common/EmptyState';
 import { getInitials } from '../utils/formatters';
 import { projectService } from '../services/services';
 import ProjectDiscussion from '../components/projects/ProjectDiscussion';
@@ -14,61 +15,93 @@ export const Team = () => {
   const [selectedMember, setSelectedMember] = useState(null);
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [invitations, setInvitations] = useState([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
 
   useEffect(() => {
-    const fetchDiscussionProjects = async () => {
-      try {
-        const res = await projectService.getProjects();
-        const list = res.data?.content || (Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []));
-        setProjects(list);
-        if (list.length > 0 && !selectedProject) {
-          setSelectedProject(list[0]);
-        }
-      } catch (err) {
-        console.error('Failed to load projects for discussion selector', err);
-      }
-    };
-    fetchDiscussionProjects();
+    fetchProjects();
+    fetchInvitations();
   }, []);
+
+  useEffect(() => {
+    if (selectedProject?.id) {
+      fetchMembers(selectedProject.id);
+    }
+  }, [selectedProject]);
+
+  const fetchProjects = async () => {
+    try {
+      const res = await projectService.getProjects();
+      const list = res.data?.content || (Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []));
+      setProjects(list);
+      if (list.length > 0) {
+        setSelectedProject(list[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load projects', err);
+    }
+  };
+
+  const fetchMembers = async (projectId) => {
+    setLoadingMembers(true);
+    try {
+      const res = await projectService.getMembers(projectId);
+      const list = res.data?.content || (Array.isArray(res.data) ? res.data : []);
+      setMembers(list);
+    } catch (err) {
+      setMembers([]);
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const fetchInvitations = async () => {
+    try {
+      const res = await projectService.getInvitations();
+      const list = res.data?.content || (Array.isArray(res.data) ? res.data : []);
+      setInvitations(list);
+    } catch (err) {
+      setInvitations([]);
+    }
+  };
 
   // Invite Form State
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('DEVELOPER');
-  const [inviteMessage, setInviteMessage] = useState('Join our high-velocity software engineering squad on TaskForge AI.');
+  const [inviteMessage, setInviteMessage] = useState('');
 
-  const [members, setMembers] = useState([
-    { id: 1, name: 'Jagadish K', email: 'admin@taskforge.com', role: 'OWNER', dept: 'Engineering', status: 'online', tasks: 12, projects: 5, skills: ['Spring Boot', 'React', 'TypeScript'] },
-    { id: 2, name: 'Sarah Lin', email: 'sarah.lin@company.com', role: 'MANAGER', dept: 'Product', status: 'online', tasks: 8, projects: 4, skills: ['Agile', 'Product Strategy', 'UI/UX'] },
-    { id: 3, name: 'Marcus Vance', email: 'marcus.vance@company.com', role: 'DEVELOPER', dept: 'Backend', status: 'offline', tasks: 15, projects: 3, skills: ['Java 21', 'Kubernetes', 'PostgreSQL'] },
-    { id: 4, name: 'Elena Rostova', email: 'elena.rostova@company.com', role: 'QA', dept: 'Quality Assurance', status: 'online', tasks: 6, projects: 4, skills: ['Selenium', 'Playwright', 'Junit5'] },
-  ]);
-
-  const [invitations, setInvitations] = useState([
-    { id: 101, email: 'devyn.chen@consultant.com', role: 'DEVELOPER', invitedBy: 'admin@taskforge.com', status: 'PENDING', date: '2026-07-12' },
-  ]);
-
-  const handleSendInvite = (e) => {
+  const handleSendInvite = async (e) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
+    if (!selectedProject?.id) {
+      toast.error('Select a project to invite member to');
+      return;
+    }
 
-    const newInv = {
-      id: Date.now(),
-      email: inviteEmail.trim(),
-      role: inviteRole,
-      invitedBy: 'admin@taskforge.com',
-      status: 'PENDING',
-      date: new Date().toISOString().split('T')[0],
-    };
-
-    setInvitations([...invitations, newInv]);
-    toast.success(`Invitation dispatched to ${inviteEmail}`);
-    setInviteEmail('');
-    setShowInviteModal(false);
+    try {
+      await projectService.inviteMember(selectedProject.id, {
+        email: inviteEmail.trim(),
+        role: inviteRole,
+        message: inviteMessage,
+      });
+      toast.success(`Invitation dispatched to ${inviteEmail}`);
+      setInviteEmail('');
+      setShowInviteModal(false);
+      fetchInvitations();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to send invitation');
+    }
   };
 
-  const handleRevokeInvite = (id) => {
-    setInvitations(invitations.filter((i) => i.id !== id));
-    toast.success('Invitation revoked');
+  const handleRejectInvite = async (id) => {
+    try {
+      await projectService.rejectInvitation(id);
+      toast.success('Invitation declined');
+      fetchInvitations();
+    } catch (err) {
+      toast.error('Failed to decline invitation');
+    }
   };
 
   const permissionsMatrix = [
@@ -80,12 +113,13 @@ export const Team = () => {
     { cap: 'Manage Workspace & Team', owner: true, manager: false, dev: false, qa: false, viewer: false },
   ];
 
-  const filteredMembers = members.filter(
-    (m) =>
-      m.name.toLowerCase().includes(search.toLowerCase()) ||
-      m.email.toLowerCase().includes(search.toLowerCase()) ||
-      m.dept.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredMembers = members.filter((m) => {
+    const name = m.user?.name || m.name || '';
+    const email = m.user?.email || m.email || '';
+    const role = m.role || '';
+    const term = search.toLowerCase();
+    return name.toLowerCase().includes(term) || email.toLowerCase().includes(term) || role.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">
@@ -96,32 +130,56 @@ export const Team = () => {
             <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" /> Team Workspace Directory
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Manage organization members, role permission matrix, and pending invitations
+            Manage project members, role permission matrix, and pending invitations
           </p>
         </div>
 
         <button
+          type="button"
           onClick={() => setShowInviteModal(true)}
-          className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center gap-1.5 self-start sm:self-auto"
+          className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl shadow-sm hover:bg-blue-500 transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
         >
           <UserPlus className="w-4 h-4" /> Invite Member
         </button>
       </div>
 
+      {/* Global Project Context Selector */}
+      {projects.length > 0 && (
+        <div className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800/80">
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Target Project:</span>
+          <select
+            value={selectedProject?.id || ''}
+            onChange={(e) => {
+              const selectedId = Number(e.target.value);
+              const found = projects.find((p) => p.id === selectedId);
+              if (found) setSelectedProject(found);
+            }}
+            className="px-3 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none"
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                #{p.name} ({p.projectKey || p.key})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 overflow-x-auto">
         {[
           { key: 'DISCUSSION', label: 'Discussion Log', icon: MessageSquare },
-          { key: 'MEMBERS', label: `Active Members (${members.length})`, icon: Users },
+          { key: 'MEMBERS', label: `Project Members (${members.length})`, icon: Users },
           { key: 'PERMISSIONS', label: 'Role Permissions Matrix', icon: Shield },
-          { key: 'INVITATIONS', label: `Pending Invitations (${invitations.length})`, icon: Mail },
+          { key: 'INVITATIONS', label: `My Invitations (${invitations.length})`, icon: Mail },
         ].map((tab) => {
           const Icon = tab.icon;
           return (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`px-3.5 py-2 text-xs font-medium rounded-xl transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 text-xs font-medium rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 activeTab === tab.key
                   ? 'bg-blue-600 text-white font-semibold shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -137,31 +195,9 @@ export const Team = () => {
       {/* Discussion View */}
       {activeTab === 'DISCUSSION' && (
         <Card className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800/80">
-            <div>
-              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Project Discussion Log</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">Select a project channel to start communicating with your squad</p>
-            </div>
-            {projects.length > 0 && (
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] font-semibold text-slate-500">Project Channel:</span>
-                <select
-                  value={selectedProject?.id || ''}
-                  onChange={(e) => {
-                    const selectedId = Number(e.target.value);
-                    const found = projects.find((p) => p.id === selectedId);
-                    if (found) setSelectedProject(found);
-                  }}
-                  className="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-205 focus:outline-none"
-                >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      #{p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+          <div className="pb-3 border-b border-slate-100 dark:border-slate-800/80">
+            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Project Discussion Log</h3>
+            <p className="text-[10px] text-slate-400 mt-0.5">Real-time collaboration channel for selected project</p>
           </div>
 
           <div className="h-[520px] rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -172,10 +208,10 @@ export const Team = () => {
                 projectOwnerId={selectedProject.owner?.id}
               />
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs py-12 space-y-2">
-                <MessageSquare className="w-10 h-10 text-slate-500 opacity-60" />
-                <p className="font-semibold">No active projects found</p>
-              </div>
+              <EmptyState
+                title="No Projects Available"
+                description="Create or join a project to participate in discussions."
+              />
             )}
           </div>
         </Card>
@@ -188,48 +224,53 @@ export const Team = () => {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search by name, email, department..."
+              placeholder="Search members by name, email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-            {filteredMembers.map((m) => (
-              <Card
-                key={m.id}
-                onClick={() => setSelectedMember(m)}
-                className="cursor-pointer hover:border-blue-500/40 transition-all flex items-start justify-between p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-sm">
-                      {getInitials(m.name)}
-                    </div>
-                    <span
-                      className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ring-2 ring-white dark:ring-slate-900 ${
-                        m.status === 'online' ? 'bg-emerald-500' : 'bg-slate-400'
-                      }`}
-                    />
-                  </div>
+          {loadingMembers ? (
+            <p className="text-xs text-slate-500 p-4">Loading project members...</p>
+          ) : filteredMembers.length === 0 ? (
+            <EmptyState
+              title="No Members Found"
+              description="No members match your search filter for this project."
+            />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredMembers.map((m) => {
+                const name = m.user?.name || m.name || 'Project Member';
+                const email = m.user?.email || m.email || '';
+                return (
+                  <Card
+                    key={m.id || email}
+                    onClick={() => setSelectedMember(m)}
+                    className="cursor-pointer hover:border-blue-500/40 transition-all flex items-start justify-between p-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0">
+                        {getInitials(name)}
+                      </div>
 
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{m.name}</h4>
-                      <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 rounded uppercase">
-                        {m.role}
-                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{name}</h4>
+                          <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 rounded uppercase">
+                            {m.role || 'MEMBER'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{email}</p>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{m.email}</p>
-                    <p className="text-[10px] text-slate-400 mt-1">Dept: {m.dept} • {m.tasks} assigned tasks</p>
-                  </div>
-                </div>
 
-                <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
-              </Card>
-            ))}
-          </div>
+                    <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -279,20 +320,24 @@ export const Team = () => {
           </div>
 
           {invitations.length === 0 ? (
-            <p className="text-xs text-slate-400 py-6 text-center">No pending invitations</p>
+            <EmptyState
+              title="No Pending Invitations"
+              description="You have no pending invitations to join projects."
+            />
           ) : (
             <div className="space-y-3">
               {invitations.map((i) => (
                 <div key={i.id} className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
                   <div>
-                    <h4 className="font-bold text-slate-900 dark:text-slate-100">{i.email}</h4>
-                    <span className="text-[10px] text-slate-400 font-mono">Role: {i.role} • Invited by {i.invitedBy}</span>
+                    <h4 className="font-bold text-slate-900 dark:text-slate-100">{i.projectName || 'Project Invitation'}</h4>
+                    <span className="text-[10px] text-slate-400 font-mono">Role: {i.role}</span>
                   </div>
                   <button
-                    onClick={() => handleRevokeInvite(i.id)}
-                    className="px-3 py-1 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 rounded-lg text-xs font-semibold hover:bg-red-100"
+                    type="button"
+                    onClick={() => handleRejectInvite(i.id)}
+                    className="px-3 py-1 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-semibold hover:bg-rose-100 cursor-pointer"
                   >
-                    Revoke Token
+                    Decline
                   </button>
                 </div>
               ))}
@@ -349,7 +394,7 @@ export const Team = () => {
           <div className="flex justify-end pt-2">
             <button
               type="submit"
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-xs"
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl shadow-xs cursor-pointer"
             >
               Dispatch Email Invitation
             </button>
@@ -363,29 +408,21 @@ export const Team = () => {
           <div className="space-y-4 text-xs">
             <div className="flex items-center gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
               <div className="w-12 h-12 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-base">
-                {getInitials(selectedMember.name)}
+                {getInitials(selectedMember.user?.name || selectedMember.name || 'M')}
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">{selectedMember.name}</h3>
-                <p className="text-slate-400">{selectedMember.email}</p>
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
+                  {selectedMember.user?.name || selectedMember.name || 'Member'}
+                </h3>
+                <p className="text-slate-400">{selectedMember.user?.email || selectedMember.email}</p>
               </div>
             </div>
 
             <div className="space-y-2">
-              <h4 className="font-bold text-slate-800 dark:text-slate-200">Skills & Tech Stack</h4>
-              <div className="flex flex-wrap gap-1.5">
-                {selectedMember.skills.map((s, idx) => (
-                  <span key={idx} className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 rounded font-mono font-semibold">
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-1">Workload Statistics</h4>
-              <p className="text-slate-500 dark:text-slate-400">Assigned Tasks: <span className="font-bold text-slate-900 dark:text-slate-100">{selectedMember.tasks} active tasks</span></p>
-              <p className="text-slate-500 dark:text-slate-400">Participating Projects: <span className="font-bold text-slate-900 dark:text-slate-100">{selectedMember.projects} projects</span></p>
+              <h4 className="font-bold text-slate-800 dark:text-slate-200">Role & Access</h4>
+              <p className="text-slate-500 dark:text-slate-400">
+                Assigned Role: <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">{selectedMember.role || 'MEMBER'}</span>
+              </p>
             </div>
           </div>
         )}

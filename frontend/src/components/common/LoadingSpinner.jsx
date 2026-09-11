@@ -47,4 +47,37 @@ export const SkeletonCard = () => (
   </div>
 );
 
+export const SkeletonText = ({ lines = 3, className = '' }) => (
+  <div className={`space-y-2 animate-pulse ${className}`}>
+    {Array.from({ length: lines }).map((_, i) => (
+      <div
+        key={i}
+        className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded-md"
+        style={{ width: i === lines - 1 && lines > 1 ? '60%' : '100%' }}
+      />
+    ))}
+  </div>
+);
+
+export const SkeletonRow = () => (
+  <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800/80 animate-pulse">
+    <div className="flex items-center gap-3">
+      <div className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-800" />
+      <div className="space-y-1.5">
+        <div className="w-36 h-4 bg-slate-200 dark:bg-slate-800 rounded" />
+        <div className="w-24 h-3 bg-slate-200 dark:bg-slate-800 rounded" />
+      </div>
+    </div>
+    <div className="w-20 h-6 bg-slate-200 dark:bg-slate-800 rounded-full" />
+  </div>
+);
+
+export const SkeletonList = ({ rows = 4 }) => (
+  <div className="space-y-3">
+    {Array.from({ length: rows }).map((_, i) => (
+      <SkeletonRow key={i} />
+    ))}
+  </div>
+);
+
 export default LoadingSpinner;

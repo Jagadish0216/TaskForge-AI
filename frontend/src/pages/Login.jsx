@@ -228,9 +228,9 @@ export const Login = () => {
                 <label className="block text-xs font-semibold text-slate-300">
                   Account Password
                 </label>
-                <a href="#forgot" className="text-[11px] text-blue-400 hover:underline">
+                <Link to="/forgot-password" className="text-[11px] text-blue-400 hover:underline">
                   Forgot Password?
-                </a>
+                </Link>
               </div>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
