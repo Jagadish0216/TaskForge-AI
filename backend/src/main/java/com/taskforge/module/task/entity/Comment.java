@@ -8,7 +8,12 @@ import jakarta.validation.constraints.NotNull;
 import java.util.Objects;
 
 @Entity
-@Table(name = "comments")
+@Table(
+        name = "comments",
+        indexes = {
+                @Index(name = "idx_comment_task_deleted", columnList = "task_id, deleted")
+        }
+)
 public class Comment extends BaseEntity {
 
     @Id

@@ -13,7 +13,10 @@ import java.util.Objects;
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_project_user",
                 columnNames = {"project_id", "user_id"}
-        )
+        ),
+        indexes = {
+                @Index(name = "idx_project_member_user", columnList = "user_id")
+        }
 )
 public class ProjectMember extends BaseEntity {
 

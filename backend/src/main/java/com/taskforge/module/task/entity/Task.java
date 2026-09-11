@@ -13,7 +13,14 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 @Entity
-@Table(name = "tasks")
+@Table(
+        name = "tasks",
+        indexes = {
+                @Index(name = "idx_task_project_status", columnList = "project_id, status"),
+                @Index(name = "idx_task_assignee_status", columnList = "assignee_id, status"),
+                @Index(name = "idx_task_due_date_status", columnList = "due_date, status")
+        }
+)
 public class Task extends BaseEntity {
 
     @Id

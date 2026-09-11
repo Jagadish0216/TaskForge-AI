@@ -9,7 +9,12 @@ import jakarta.validation.constraints.NotNull;
 import java.util.Objects;
 
 @Entity
-@Table(name = "notifications")
+@Table(
+        name = "notifications",
+        indexes = {
+                @Index(name = "idx_notification_recipient_read", columnList = "recipient_id, is_read")
+        }
+)
 public class Notification extends BaseEntity {
 
     @Id

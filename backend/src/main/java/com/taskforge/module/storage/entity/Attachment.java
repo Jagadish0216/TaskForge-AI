@@ -10,7 +10,13 @@ import jakarta.validation.constraints.NotNull;
 import java.util.Objects;
 
 @Entity
-@Table(name = "attachments")
+@Table(
+        name = "attachments",
+        indexes = {
+                @Index(name = "idx_attachment_task", columnList = "task_id"),
+                @Index(name = "idx_attachment_project", columnList = "project_id")
+        }
+)
 public class Attachment extends BaseEntity {
 
     @Id

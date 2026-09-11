@@ -14,7 +14,10 @@ import java.util.Objects;
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_project_invitee_pending",
                 columnNames = {"project_id", "invitee_id", "status"}
-        )
+        ),
+        indexes = {
+                @Index(name = "idx_invitation_invitee_status", columnList = "invitee_id, status")
+        }
 )
 public class ProjectInvitation extends BaseEntity {
 

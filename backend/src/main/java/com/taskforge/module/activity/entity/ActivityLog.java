@@ -11,7 +11,13 @@ import jakarta.validation.constraints.NotNull;
 import java.util.Objects;
 
 @Entity
-@Table(name = "activity_logs")
+@Table(
+        name = "activity_logs",
+        indexes = {
+                @Index(name = "idx_activity_project_created", columnList = "project_id, created_at"),
+                @Index(name = "idx_activity_user_created", columnList = "user_id, created_at")
+        }
+)
 public class ActivityLog extends BaseEntity {
 
     @Id

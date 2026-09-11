@@ -85,7 +85,7 @@ public class NotificationService {
     public long getUnreadCount(Long userId) {
         User recipient = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-        return notificationRepository.findByRecipientAndIsReadFalse(recipient).size();
+        return notificationRepository.countByRecipientAndIsReadFalse(recipient);
     }
 
     @Transactional(readOnly = true)

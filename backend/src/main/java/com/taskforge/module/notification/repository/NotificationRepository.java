@@ -11,5 +11,6 @@ import java.util.List;
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, Long>, JpaSpecificationExecutor<Notification> {
     List<Notification> findByRecipientAndIsReadFalse(User recipient);
+    long countByRecipientAndIsReadFalse(User recipient);
     List<Notification> findByRecipient(User recipient);
 }
