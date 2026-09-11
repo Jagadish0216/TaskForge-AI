@@ -23,7 +23,6 @@ import com.taskforge.module.task.repository.TaskRepository;
 import com.taskforge.module.task.repository.CommentRepository;
 import com.taskforge.module.task.service.TaskService;
 import com.taskforge.module.storage.repository.AttachmentRepository;
-import com.taskforge.module.storage.entity.Attachment;
 import com.taskforge.module.user.entity.Role;
 import com.taskforge.module.user.entity.User;
 import com.taskforge.module.user.repository.RoleRepository;
@@ -52,7 +51,6 @@ import com.taskforge.module.activity.dto.ActivityResponse;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/admin")
@@ -149,35 +147,30 @@ public class AdminController {
         stats.put("totalProjects", projectRepository.count());
         stats.put("totalTasks", taskRepository.count());
         stats.put("completedTasks", taskRepository.countByStatus(TaskStatus.DONE));
-        
+
         long pending = taskRepository.count() - taskRepository.countByStatus(TaskStatus.DONE);
         stats.put("pendingTasks", pending);
 
-        List<Project> projects = projectRepository.findAll();
-        long archived = projects.stream().filter(Project::isArchived).count();
+        // Archived/active/AI-generated — targeted COUNT, no findAll()
+        long archived = projectRepository.countByArchivedTrue();
         stats.put("archivedProjects", archived);
-        stats.put("activeProjects", projects.size() - archived);
-        stats.put("aiGeneratedProjects", projects.stream().filter(Project::isAiGenerated).count());
+        stats.put("activeProjects", projectRepository.count() - archived);
+        stats.put("aiGeneratedProjects", projectRepository.countByAiGeneratedTrue());
         stats.put("activeUsers", userRepository.countByEnabledTrueAndDeletedFalse());
 
-        // Overdue tasks
+        // Overdue tasks — single COUNT query, no findAll()
         LocalDate today = LocalDate.now();
-        long overdue = taskRepository.findAll().stream()
-                .filter(t -> t.getStatus() != TaskStatus.DONE && t.getDueDate() != null && t.getDueDate().isBefore(today))
-                .count();
-        stats.put("overdueTasks", overdue);
+        stats.put("overdueTasks", taskRepository.countOverdueTasks(TaskStatus.DONE, today));
 
-        // Discussion Messages, Comments, Attachments, Storage
+        // Discussion Messages, Comments, Attachments
         stats.put("discussionMessages", projectMessageRepository.count());
         stats.put("attachments", attachmentRepository.count());
         stats.put("comments", commentRepository.count());
 
-        long totalSize = attachmentRepository.findAll().stream()
-                .mapToLong(Attachment::getFileSize)
-                .sum();
-        stats.put("storageUsage", totalSize);
+        // Storage usage — single SUM query, no findAll()
+        stats.put("storageUsage", attachmentRepository.sumFileSize());
 
-        // Recent activity
+        // Recent activity — paginated, no extra filtering needed (admin sees all)
         Pageable pageable = PageRequest.of(0, 15, Sort.by(Sort.Direction.DESC, "createdAt"));
         stats.put("recentActivities", activityLogRepository.findAll(pageable).getContent().stream()
                 .map(log -> {
@@ -190,14 +183,18 @@ public class AdminController {
                     return item;
                 }).toList());
 
-        // Projects by priority
-        Map<String, Long> projectsByPriority = projects.stream()
-                .collect(Collectors.groupingBy(p -> p.getPriority().name(), Collectors.counting()));
+        // Projects by priority — GROUP BY query, no findAll()
+        Map<String, Long> projectsByPriority = new HashMap<>();
+        for (ProjectRepository.ProjectPriorityCount ppc : projectRepository.countAllByPriorityGrouped()) {
+            projectsByPriority.put(ppc.getPriority(), ppc.getCount());
+        }
         stats.put("projectsByPriority", projectsByPriority);
 
-        // Tasks by status
-        Map<String, Long> tasksByStatus = taskRepository.findAll().stream()
-                .collect(Collectors.groupingBy(t -> t.getStatus().name(), Collectors.counting()));
+        // Tasks by status — GROUP BY query, no findAll()
+        Map<String, Long> tasksByStatus = new HashMap<>();
+        for (TaskRepository.TaskStatusCount tsc : taskRepository.countAllByStatusGrouped()) {
+            tasksByStatus.put(tsc.getStatus(), tsc.getCount());
+        }
         stats.put("tasksByStatus", tasksByStatus);
 
         return ResponseEntity.ok(ApiResponse.success(stats));
@@ -212,41 +209,58 @@ public class AdminController {
 
         Map<String, Object> data = new HashMap<>();
 
-        // Generate monthly user growth / creation metrics
-        List<Map<String, Object>> growthTrend = new ArrayList<>();
+        // Build the 6-month date range: from start of 5-months-ago to start of next month
         LocalDate now = LocalDate.now();
+        LocalDate sixMonthsAgoDate = now.minusMonths(5).withDayOfMonth(1);
+        LocalDate nextMonthDate = now.plusMonths(1).withDayOfMonth(1);
+        LocalDateTime rangeStart = sixMonthsAgoDate.atStartOfDay();
+        LocalDateTime rangeEnd = nextMonthDate.atStartOfDay();
+
+        // Three GROUP BY queries replace 18 findAll() calls
+        Map<String, Long> userCountByMonthKey = buildMonthKeyMap(
+                userRepository.countCreatedByMonth(rangeStart, rangeEnd));
+        Map<String, Long> projectCountByMonthKey = buildMonthKeyMap(
+                projectRepository.countCreatedByMonth(rangeStart, rangeEnd));
+        Map<String, Long> taskCountByMonthKey = buildMonthKeyMap(
+                taskRepository.countCreatedByMonth(rangeStart, rangeEnd));
+
+        // Build the 6-slot list with the same month label format as before
+        List<Map<String, Object>> growthTrend = new ArrayList<>();
         for (int i = 5; i >= 0; i--) {
             LocalDate targetDate = now.minusMonths(i);
+            // Preserve original label format: "JAN 2025"
             String monthName = targetDate.getMonth().name().substring(0, 3) + " " + targetDate.getYear();
-
-            long registeredCount = userRepository.findAll().stream()
-                    .filter(u -> u.getCreatedAt() != null && u.getCreatedAt().getMonth() == targetDate.getMonth() && u.getCreatedAt().getYear() == targetDate.getYear())
-                    .count();
-
-            long projectsCount = projectRepository.findAll().stream()
-                    .filter(p -> p.getCreatedAt() != null && p.getCreatedAt().getMonth() == targetDate.getMonth() && p.getCreatedAt().getYear() == targetDate.getYear())
-                    .count();
-
-            long tasksCount = taskRepository.findAll().stream()
-                    .filter(t -> t.getCreatedAt() != null && t.getCreatedAt().getMonth() == targetDate.getMonth() && t.getCreatedAt().getYear() == targetDate.getYear())
-                    .count();
+            String key = targetDate.getYear() + "-" + targetDate.getMonthValue();
 
             growthTrend.add(Map.of(
                     "month", monthName,
-                    "users", registeredCount,
-                    "projects", projectsCount,
-                    "tasks", tasksCount
+                    "users", userCountByMonthKey.getOrDefault(key, 0L),
+                    "projects", projectCountByMonthKey.getOrDefault(key, 0L),
+                    "tasks", taskCountByMonthKey.getOrDefault(key, 0L)
             ));
         }
 
         data.put("growthTrend", growthTrend);
 
-        // AI usage details
-        long totalAIProjects = projectRepository.findAll().stream().filter(Project::isAiGenerated).count();
+        // AI usage — targeted COUNT, no findAll()
+        long totalAIProjects = projectRepository.countByAiGeneratedTrue();
         data.put("totalAIProjects", totalAIProjects);
-        data.put("aiPercentage", projectRepository.count() > 0 ? (double) totalAIProjects * 100 / projectRepository.count() : 0);
+        data.put("aiPercentage", projectRepository.count() > 0
+                ? (double) totalAIProjects * 100 / projectRepository.count() : 0);
 
         return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
+    /**
+     * Converts a list of MonthlyCount projections into a lookup map keyed by "year-month".
+     * Example key: "2025-3" for March 2025.
+     */
+    private Map<String, Long> buildMonthKeyMap(List<com.taskforge.common.dto.MonthlyCount> counts) {
+        Map<String, Long> map = new HashMap<>();
+        for (com.taskforge.common.dto.MonthlyCount mc : counts) {
+            map.put(mc.getYear() + "-" + mc.getMonth(), mc.getCount());
+        }
+        return map;
     }
 
     // --- AUDIT LOGS ---
