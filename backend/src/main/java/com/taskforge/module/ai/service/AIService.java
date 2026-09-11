@@ -15,6 +15,8 @@ import com.taskforge.module.ai.util.PromptBuilder;
 import com.taskforge.module.project.dto.ProjectCreateRequest;
 import com.taskforge.module.project.dto.ProjectResponse;
 import com.taskforge.module.project.entity.Project;
+import com.taskforge.module.project.entity.ProjectMember;
+import com.taskforge.module.project.repository.ProjectMemberRepository;
 import com.taskforge.module.project.repository.ProjectRepository;
 import com.taskforge.module.project.service.ProjectService;
 import com.taskforge.module.task.entity.Task;
@@ -22,6 +24,7 @@ import com.taskforge.module.task.repository.TaskRepository;
 import com.taskforge.module.task.service.TaskService;
 import com.taskforge.module.user.entity.User;
 import com.taskforge.module.user.repository.UserRepository;
+import com.taskforge.security.ProjectAuthorizationService;
 import com.taskforge.security.SecurityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class AIService {
@@ -56,6 +61,8 @@ public class AIService {
     private final ActivityService activityService;
     private final ObjectMapper objectMapper;
     private final IntentDetector intentDetector;
+    private final ProjectAuthorizationService authorizationService;
+    private final ProjectMemberRepository projectMemberRepository;
 
     public AIService(
             GeminiProvider geminiProvider,
@@ -66,7 +73,9 @@ public class AIService {
             UserRepository userRepository,
             ActivityService activityService,
             ObjectMapper objectMapper,
-            IntentDetector intentDetector
+            IntentDetector intentDetector,
+            ProjectAuthorizationService authorizationService,
+            ProjectMemberRepository projectMemberRepository
     ) {
         this.geminiProvider = geminiProvider;
         this.projectService = projectService;
@@ -77,6 +86,8 @@ public class AIService {
         this.activityService = activityService;
         this.objectMapper = objectMapper;
         this.intentDetector = intentDetector;
+        this.authorizationService = authorizationService;
+        this.projectMemberRepository = projectMemberRepository;
     }
 
     /**
@@ -317,6 +328,10 @@ public class AIService {
         if (projectId != null) {
             Project project = projectRepository.findById(projectId).orElse(null);
             if (project != null) {
+                // Verify the authenticated user has read access to this project
+                User currentUser = authorizationService.getAuthenticatedUser();
+                authorizationService.verifyProjectReadAccess(project, currentUser);
+
                 sb.append("ACTIVE PROJECT CONTEXT:\n");
                 sb.append("- ID: ").append(project.getId()).append("\n");
                 sb.append("- Name: ").append(project.getName()).append(" (Key: ").append(project.getProjectKey()).append(")\n");
@@ -339,14 +354,39 @@ public class AIService {
             }
         }
 
-        List<Project> allProjects = projectRepository.findAll();
-        sb.append("WORKSPACE GLOBAL CONTEXT:\n");
-        sb.append("- Total Projects: ").append(allProjects.size()).append("\n");
-        for (Project p : allProjects) {
-            long total = taskRepository.countByProject(p);
-            long done = taskRepository.countByProjectAndStatus(p, TaskStatus.DONE);
-            sb.append("  • Project: ").append(p.getName()).append(" [Key: ").append(p.getProjectKey()).append(", Status: ").append(p.getStatus()).append("] Tasks: ").append(done).append("/").append(total).append(" completed\n");
+        // Workspace context — scope to user's accessible projects with single aggregation query
+        User currentUser = authorizationService.getAuthenticatedUser();
+        List<Project> accessibleProjects;
+
+        if (authorizationService.isAdmin(currentUser)) {
+            accessibleProjects = projectRepository.findAll();
+        } else {
+            accessibleProjects = projectMemberRepository.findByUser(currentUser).stream()
+                    .map(ProjectMember::getProject)
+                    .toList();
         }
+
+        sb.append("WORKSPACE GLOBAL CONTEXT:\n");
+        sb.append("- Total Projects: ").append(accessibleProjects.size()).append("\n");
+
+        if (!accessibleProjects.isEmpty()) {
+            List<Long> projectIds = accessibleProjects.stream().map(Project::getId).toList();
+
+            // Single GROUP BY query replaces 2P individual count queries
+            List<TaskRepository.ProjectTaskSummary> summaries = taskRepository.countTaskSummaryByProjects(projectIds);
+            Map<Long, TaskRepository.ProjectTaskSummary> summaryMap = new HashMap<>();
+            for (TaskRepository.ProjectTaskSummary s : summaries) {
+                summaryMap.put(s.getProjectId(), s);
+            }
+
+            for (Project p : accessibleProjects) {
+                TaskRepository.ProjectTaskSummary summary = summaryMap.get(p.getId());
+                long total = summary != null ? summary.getTotalCount() : 0;
+                long done = summary != null ? summary.getDoneCount() : 0;
+                sb.append("  • Project: ").append(p.getName()).append(" [Key: ").append(p.getProjectKey()).append(", Status: ").append(p.getStatus()).append("] Tasks: ").append(done).append("/").append(total).append(" completed\n");
+            }
+        }
+
         return sb.toString();
     }
 

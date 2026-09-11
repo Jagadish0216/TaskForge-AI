@@ -52,4 +52,25 @@ public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificat
     @EntityGraph(attributePaths = {"assignee", "project", "project.owner", "assignedBy"})
     @Query("SELECT t FROM Task t WHERE t.status <> com.taskforge.common.constant.TaskStatus.DONE AND t.dueDate >= :fromDate AND (t.assignee = :user OR t.project.owner = :user) ORDER BY t.dueDate ASC")
     List<Task> findUpcomingDeadlines(@Param("user") User user, @Param("fromDate") LocalDate fromDate);
+
+    @EntityGraph(attributePaths = {"assignee", "project", "project.owner", "assignedBy"})
+    @Query("SELECT t FROM Task t WHERE t.project.id IN :projectIds AND " +
+           "(LOWER(t.title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+           "LOWER(t.description) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    List<Task> searchByKeyword(@Param("keyword") String keyword,
+                               @Param("projectIds") List<Long> projectIds);
+
+    /**
+     * Projection interface for per-project task count aggregation.
+     */
+    interface ProjectTaskSummary {
+        Long getProjectId();
+        long getTotalCount();
+        long getDoneCount();
+    }
+
+    @Query("SELECT t.project.id AS projectId, COUNT(t) AS totalCount, " +
+           "SUM(CASE WHEN t.status = com.taskforge.common.constant.TaskStatus.DONE THEN 1 ELSE 0 END) AS doneCount " +
+           "FROM Task t WHERE t.project.id IN :projectIds GROUP BY t.project.id")
+    List<ProjectTaskSummary> countTaskSummaryByProjects(@Param("projectIds") List<Long> projectIds);
 }
