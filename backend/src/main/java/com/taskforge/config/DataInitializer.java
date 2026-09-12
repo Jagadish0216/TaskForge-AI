@@ -93,14 +93,21 @@ public class DataInitializer implements CommandLineRunner {
             log.info("APP_RESET_DEMO_DATA is true. Resetting old demo dataset...");
             resetDataset();
             log.info("Old demo dataset successfully reset.");
-        } else if (userRepository.existsByEmail("admin@demo.taskforge.local") && projectRepository.existsByProjectKey("PULSE")) {
+        } else if (isDatasetInitialized()) {
             log.info("Portfolio demonstration dataset already initialized. Skipping seed.");
             return;
         }
 
         log.info("Seeding clean, canonical portfolio demonstration dataset...");
         seedDataset(roleMap);
-        log.info("Demo reset executed: 3 users created, 1 project created, 10 tasks created.");
+        log.info("Demo dataset initialization completed: 3 users, 1 project (PULSE), 10 tasks.");
+    }
+
+    private boolean isDatasetInitialized() {
+        return projectRepository.existsByProjectKey("PULSE") ||
+               userRepository.existsByEmail("admin@demo.taskforge.local") ||
+               userRepository.existsByEmail("manager@demo.taskforge.local") ||
+               userRepository.existsByEmail("member@demo.taskforge.local");
     }
 
     private void resetDataset() {
@@ -233,6 +240,10 @@ public class DataInitializer implements CommandLineRunner {
 
     private User createUser(String email, String encodedPassword, String firstName, String lastName, String username,
                             String department, String designation, String bio, String skills, Role role) {
+        Optional<User> existing = userRepository.findByEmail(email);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
         User user = new User();
         user.setEmail(email);
         user.setPassword(encodedPassword);
@@ -255,6 +266,10 @@ public class DataInitializer implements CommandLineRunner {
                                   ProjectPriority priority, ProjectVisibility visibility,
                                   LocalDate startDate, LocalDate endDate, String techStack,
                                   String teamSize, String phase, User owner) {
+        Optional<Project> existing = projectRepository.findByProjectKey(key);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
         Project project = new Project();
         project.setName(name);
         project.setProjectKey(key);
@@ -274,6 +289,9 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void addMember(Project project, User user, ProjectMemberRole role) {
+        if (projectMemberRepository.findByProjectAndUser(project, user).isPresent()) {
+            return;
+        }
         ProjectMember member = new ProjectMember();
         member.setProject(project);
         member.setUser(user);
