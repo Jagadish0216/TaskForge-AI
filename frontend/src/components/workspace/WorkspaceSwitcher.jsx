@@ -5,11 +5,11 @@ import toast from 'react-hot-toast';
 
 export const WorkspaceSwitcher = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeWs, setActiveWs] = useState({ id: 1, name: 'Acme SaaS Engineering', role: 'Owner' });
+  const [activeWs, setActiveWs] = useState({ id: 1, name: 'TaskForge Engineering', role: 'Owner' });
   const navigate = useNavigate();
 
   const workspaces = [
-    { id: 1, name: 'Acme SaaS Engineering', role: 'Owner', badge: 'Active' },
+    { id: 1, name: 'TaskForge Engineering', role: 'Owner', badge: 'Active' },
     { id: 2, name: 'TaskForge Open Source', role: 'Admin', badge: 'Shared' },
     { id: 3, name: 'Personal Projects', role: 'Owner', badge: 'Personal' },
   ];

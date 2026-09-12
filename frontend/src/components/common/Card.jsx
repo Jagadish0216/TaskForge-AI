@@ -5,8 +5,8 @@ export const Card = ({ children, className = '', onClick, noPad = false }) => {
     <motion.div
       whileHover={onClick ? { y: -2, transition: { duration: 0.15 } } : undefined}
       onClick={onClick}
-      className={`glass-card rounded-2xl ${noPad ? '' : 'p-5'} border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/90 shadow-sm dark:shadow-slate-950/40 ${
-        onClick ? 'cursor-pointer hover:border-blue-500/40 dark:hover:border-blue-500/40 hover:shadow-md' : ''
+      className={`glass-card rounded-xl ${noPad ? '' : 'p-4 sm:p-5'} border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs ${
+        onClick ? 'cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-colors' : ''
       } ${className}`}
     >
       {children}

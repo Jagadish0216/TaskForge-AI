@@ -4,9 +4,9 @@ import Card from '../components/common/Card';
 import toast from 'react-hot-toast';
 
 export const Workspace = () => {
-  const [name, setName] = useState('Acme SaaS Engineering');
+  const [name, setName] = useState('TaskForge Engineering');
   const [description, setDescription] = useState('High-velocity core software development squad');
-  const [urlSlug, setUrlSlug] = useState('acme-engineering');
+  const [urlSlug, setUrlSlug] = useState('taskforge-engineering');
   const [saving, setSaving] = useState(false);
 
   const handleSave = (e) => {

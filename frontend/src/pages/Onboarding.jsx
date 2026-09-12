@@ -28,7 +28,7 @@ export const Onboarding = () => {
   const navigate = useNavigate();
 
   // Onboarding Form State
-  const [workspaceName, setWorkspaceName] = useState('Acme SaaS Engineering');
+  const [workspaceName, setWorkspaceName] = useState('TaskForge Engineering');
   const [workspaceDesc, setWorkspaceDesc] = useState('High-velocity core engineering squad');
   const [selectedIcon, setSelectedIcon] = useState('Rocket');
   const [template, setTemplate] = useState('Software Development');
