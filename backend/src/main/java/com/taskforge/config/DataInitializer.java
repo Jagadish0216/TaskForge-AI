@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ import java.util.*;
 
 /**
  * Component to seed baseline system roles and clean portfolio demonstration dataset.
+ * Supports APP_RESET_DEMO_DATA for controlled production portfolio resets.
  */
 @Component
 public class DataInitializer implements CommandLineRunner {
@@ -45,9 +47,13 @@ public class DataInitializer implements CommandLineRunner {
     private final ActivityLogRepository activityLogRepository;
     private final NotificationRepository notificationRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbcTemplate;
 
     @Value("${app.seed-demo-data:false}")
     private boolean seedDemoData;
+
+    @Value("${app.reset-demo-data:false}")
+    private boolean resetDemoData;
 
     public DataInitializer(
             RoleRepository roleRepository,
@@ -58,7 +64,8 @@ public class DataInitializer implements CommandLineRunner {
             CommentRepository commentRepository,
             ActivityLogRepository activityLogRepository,
             NotificationRepository notificationRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            JdbcTemplate jdbcTemplate) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.projectRepository = projectRepository;
@@ -68,6 +75,7 @@ public class DataInitializer implements CommandLineRunner {
         this.activityLogRepository = activityLogRepository;
         this.notificationRepository = notificationRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
@@ -76,19 +84,40 @@ public class DataInitializer implements CommandLineRunner {
         log.info("Initializing baseline system roles...");
         Map<UserRole, Role> roleMap = initRoles();
 
-        if (!seedDemoData) {
-            log.info("Demo data seeding is disabled via configuration.");
+        if (!seedDemoData && !resetDemoData) {
+            log.info("Demo data seeding and reset are disabled via configuration.");
             return;
         }
 
-        if (userRepository.existsByEmail("admin@demo.taskforge.local") || projectRepository.existsByProjectKey("PULSE")) {
+        if (resetDemoData) {
+            log.info("APP_RESET_DEMO_DATA is true. Resetting old demo dataset...");
+            resetDataset();
+            log.info("Old demo dataset successfully reset.");
+        } else if (userRepository.existsByEmail("admin@demo.taskforge.local") && projectRepository.existsByProjectKey("PULSE")) {
             log.info("Portfolio demonstration dataset already initialized. Skipping seed.");
             return;
         }
 
-        log.info("Seeding clean, realistic portfolio demonstration dataset...");
+        log.info("Seeding clean, canonical portfolio demonstration dataset...");
         seedDataset(roleMap);
-        log.info("Portfolio demonstration dataset successfully seeded!");
+        log.info("Demo reset executed: 3 users created, 1 project created, 10 tasks created.");
+    }
+
+    private void resetDataset() {
+        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0");
+        jdbcTemplate.execute("DELETE FROM comment_histories");
+        jdbcTemplate.execute("DELETE FROM comments");
+        jdbcTemplate.execute("DELETE FROM attachments");
+        jdbcTemplate.execute("DELETE FROM notifications");
+        jdbcTemplate.execute("DELETE FROM activity_logs");
+        jdbcTemplate.execute("DELETE FROM project_messages");
+        jdbcTemplate.execute("DELETE FROM project_invitations");
+        jdbcTemplate.execute("DELETE FROM project_members");
+        jdbcTemplate.execute("DELETE FROM tasks");
+        jdbcTemplate.execute("DELETE FROM projects");
+        jdbcTemplate.execute("DELETE FROM user_roles");
+        jdbcTemplate.execute("DELETE FROM users");
+        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 
     private Map<UserRole, Role> initRoles() {
@@ -135,7 +164,7 @@ public class DataInitializer implements CommandLineRunner {
         // 4. Create 10 Realistic Software Engineering Tasks
         List<Task> tasks = new ArrayList<>();
 
-        // BACKLOG
+        // BACKLOG (2 tasks)
         tasks.add(createTask("Integrate OpenTelemetry tracing for real-time pipeline visualization",
                 "Set up distributed tracing agents across backend services to capture query spans and API latency metrics.",
                 TaskStatus.BACKLOG, TaskPriority.MEDIUM, now, now.plusDays(14), null, 12, 0, pulse, member, manager));
@@ -144,7 +173,7 @@ public class DataInitializer implements CommandLineRunner {
                 "Implement exponential backoff and secondary model switching when Google Gemini API encounters rate limits.",
                 TaskStatus.BACKLOG, TaskPriority.HIGH, now.plusDays(1), now.plusDays(10), null, 8, 0, pulse, manager, manager));
 
-        // TODO
+        // TODO (2 tasks)
         tasks.add(createTask("Optimize database indexing on project_activity_logs for dynamic pagination",
                 "Add composite index on (project_id, created_at) to accelerate workspace activity timeline rendering.",
                 TaskStatus.TODO, TaskPriority.HIGH, now.minusDays(2), now.plusDays(5), null, 6, 0, pulse, member, manager));
@@ -153,7 +182,7 @@ public class DataInitializer implements CommandLineRunner {
                 "Add STOMP over SockJS fallback to handle network reconnections cleanly without UI state desynchronization.",
                 TaskStatus.TODO, TaskPriority.MEDIUM, now.minusDays(1), now.plusDays(7), null, 10, 0, pulse, manager, manager));
 
-        // IN_PROGRESS
+        // IN_PROGRESS (2 tasks)
         tasks.add(createTask("Architect Spring Security JWT stateless filter with fine-grained authorization",
                 "Build stateless JwtAuthenticationFilter with access/refresh token rotation and RBAC endpoint security.",
                 TaskStatus.IN_PROGRESS, TaskPriority.URGENT, now.minusDays(8), now.plusDays(2), null, 16, 8, pulse, manager, manager));
@@ -162,7 +191,7 @@ public class DataInitializer implements CommandLineRunner {
                 "Create smooth column drag interaction, optimistic updates, and instant REST backend sync.",
                 TaskStatus.IN_PROGRESS, TaskPriority.HIGH, now.minusDays(6), now.plusDays(4), null, 14, 10, pulse, member, manager));
 
-        // IN_REVIEW
+        // IN_REVIEW (2 tasks)
         tasks.add(createTask("Develop AI Risk Radar score engine and prompt context assembly",
                 "Gather project telemetry, task status counts, and historical velocity to form structured Gemini prompt payloads.",
                 TaskStatus.IN_REVIEW, TaskPriority.URGENT, now.minusDays(10), now.plusDays(1), null, 12, 11, pulse, manager, manager));
@@ -171,7 +200,7 @@ public class DataInitializer implements CommandLineRunner {
                 "Enhance drawer UI with tabbed navigation for task descriptions, team comments, and audit activity trail.",
                 TaskStatus.IN_REVIEW, TaskPriority.MEDIUM, now.minusDays(7), now.plusDays(3), null, 8, 7, pulse, member, manager));
 
-        // DONE
+        // DONE (2 tasks)
         tasks.add(createTask("Establish Tailwind/Vanilla CSS design token system and core layout shell",
                 "Construct TaskForge dark mode design foundation using curated HSL color tokens and responsive grid shell.",
                 TaskStatus.DONE, TaskPriority.HIGH, now.minusDays(25), now.minusDays(12), now.minusDays(12), 20, 20, pulse, member, manager));
