@@ -63,7 +63,7 @@ export const getAIContent = (response) => {
 };
 
 /* ─── Helper to safely parse AI JSON output ─── */
-const parseAIJson = (content) => {
+export const parseAIJson = (content) => {
   if (!content) return null;
   let cleaned = content.trim();
   if (cleaned.startsWith('```json')) {

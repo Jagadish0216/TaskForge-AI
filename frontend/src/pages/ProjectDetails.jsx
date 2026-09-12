@@ -22,8 +22,11 @@ import {
   ShieldAlert,
   CheckCircle,
   Check,
+  Code,
+  Copy,
 } from 'lucide-react';
 import { projectService, taskService, aiService, attachmentService, activityService } from '../services/services';
+import { getAIContent, parseAIJson } from './AiWorkspace';
 import Badge from '../components/common/Badge';
 import Card from '../components/common/Card';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -57,6 +60,8 @@ export const ProjectDetails = () => {
   const [aiPrompt, setAiPrompt] = useState('Generate sprint tasks for user login, authentication, and dashboard metrics.');
   const [aiOutput, setAiOutput] = useState(null);
   const [generatingAi, setGeneratingAi] = useState(false);
+  const [showRawAi, setShowRawAi] = useState(false);
+  const [aiError, setAiError] = useState(null);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
@@ -193,16 +198,25 @@ export const ProjectDetails = () => {
   const handleGenerateAiSprint = async () => {
     if (!aiPrompt.trim()) return;
     setGeneratingAi(true);
+    setAiOutput(null);
+    setAiError(null);
+    setShowRawAi(false);
     try {
       const res = await aiService.planSprint(id, aiPrompt);
-      const resData = res.data || res;
-      setAiOutput(resData.generatedContent || resData);
+      const content = getAIContent(res);
+      const parsed = parseAIJson(content);
+      setAiOutput(parsed);
       toast.success('AI Sprint generated!');
     } catch (err) {
+      setAiError(err.response?.data?.message || 'Gemini is currently unavailable. Project data remains accessible.');
       toast.error('AI Generation failed');
     } finally {
       setGeneratingAi(false);
     }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => toast.success('Copied to clipboard'));
   };
 
   const canManageMembers = () => {
@@ -771,9 +785,164 @@ export const ProjectDetails = () => {
             </button>
           </div>
 
-          {aiOutput && (
-            <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-955 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-mono whitespace-pre-wrap text-slate-800 dark:text-slate-200">
-              {typeof aiOutput === 'string' ? aiOutput : JSON.stringify(aiOutput, null, 2)}
+          {/* Loading State */}
+          {generatingAi && (
+            <div className="py-10 flex flex-col items-center gap-3">
+              <LoadingSpinner />
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Generating sprint plan…</span>
+            </div>
+          )}
+
+          {/* Error State */}
+          {aiError && !generatingAi && (
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-center space-y-2">
+              <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto" />
+              <p className="text-xs text-amber-800 dark:text-amber-300 font-medium">{aiError}</p>
+              <button
+                onClick={handleGenerateAiSprint}
+                className="px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 border border-amber-300 dark:border-amber-700 rounded-lg transition-colors"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {/* Structured Sprint Output */}
+          {aiOutput && !generatingAi && (() => {
+            const goal = aiOutput.sprintGoal || aiOutput.goal || aiPrompt;
+            const sprintTasks = aiOutput.sprintTasks || aiOutput.tasks || aiOutput.sprint_tasks || aiOutput.items;
+            const isStructured = Array.isArray(sprintTasks) && sprintTasks.length > 0;
+
+            if (!isStructured) {
+              // Fallback: render as formatted text with copy + raw toggle
+              const rawText = aiOutput.text || (typeof aiOutput === 'string' ? aiOutput : JSON.stringify(aiOutput, null, 2));
+              return (
+                <div className="relative mt-4">
+                  <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed text-slate-700 dark:text-slate-300 max-h-[50vh] overflow-y-auto p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
+                    {rawText}
+                  </pre>
+                  <button
+                    onClick={() => copyToClipboard(rawText)}
+                    className="absolute top-2 right-2 p-1.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-blue-600 transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            }
+
+            const totalHours = sprintTasks.reduce((acc, t) => acc + (t.estimatedHours ? Number(t.estimatedHours) : 0), 0);
+
+            return (
+              <div className="space-y-4 mt-2">
+                {/* Sprint Summary Card */}
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 tracking-wider">Sprint Objective</div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5">{goal || 'Sprint Backlog Allocation'}</div>
+                    </div>
+                    <button
+                      onClick={() => setShowRawAi(!showRawAi)}
+                      className="px-2.5 py-1.5 text-[11px] font-mono text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 border border-slate-200 dark:border-slate-800 rounded-md flex items-center gap-1 transition-colors shrink-0"
+                    >
+                      <Code className="w-3 h-3" /> {showRawAi ? 'Hide Raw' : 'View raw'}
+                    </button>
+                  </div>
+
+                  {/* Metrics Strip */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="text-center p-2 rounded-md bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800/50">
+                      <div className="text-base font-bold text-slate-900 dark:text-slate-100">{sprintTasks.length}</div>
+                      <div className="text-[9px] font-mono uppercase text-slate-500 dark:text-slate-400 mt-0.5">Suggested Tasks</div>
+                    </div>
+                    <div className="text-center p-2 rounded-md bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800/50">
+                      <div className="text-base font-bold text-blue-600 dark:text-blue-400">{totalHours > 0 ? `${totalHours}h` : '--'}</div>
+                      <div className="text-[9px] font-mono uppercase text-slate-500 dark:text-slate-400 mt-0.5">Total Estimated Effort</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Raw Response Toggle */}
+                {showRawAi && (
+                  <div className="relative">
+                    <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed text-slate-700 dark:text-slate-300 max-h-[40vh] overflow-y-auto p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
+                      {JSON.stringify(aiOutput, null, 2)}
+                    </pre>
+                    <button
+                      onClick={() => copyToClipboard(JSON.stringify(aiOutput, null, 2))}
+                      className="absolute top-2 right-2 p-1.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-blue-600 transition-colors"
+                      title="Copy to clipboard"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Structured Task Cards */}
+                <div className="space-y-2.5">
+                  <h4 className="text-[10px] font-mono font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider px-1">
+                    Suggested Sprint Tasks ({sprintTasks.length})
+                  </h4>
+                  {sprintTasks.map((task, i) => {
+                    const priority = (task.priority || 'MEDIUM').toUpperCase();
+                    const est = task.estimatedHours || task.estimated_hours || task.hours;
+
+                    return (
+                      <div
+                        key={i}
+                        className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+                      >
+                        <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                          <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            AI SUGGESTED
+                          </span>
+                          <span
+                            className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded ${
+                              priority === 'CRITICAL' || priority === 'URGENT'
+                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'
+                                : priority === 'HIGH'
+                                ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400'
+                                : priority === 'MEDIUM'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                            }`}
+                          >
+                            {priority}
+                          </span>
+                          {est && (
+                            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
+                              <Clock className="w-3 h-3 text-slate-400" /> {est}h
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100">{task.title}</div>
+                        {(task.reasoning || task.description) && (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                            {task.reasoning || task.description}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Action hint */}
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center py-2">
+                  To create these tasks in your Backlog, use <strong>AI Mission Control → Sprint Planner</strong>
+                </p>
+              </div>
+            );
+          })()}
+
+          {/* Empty State */}
+          {!aiOutput && !generatingAi && !aiError && (
+            <div className="py-12 text-center">
+              <Cpu className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-700 mb-3" />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Enter a sprint goal and click <strong>Generate AI Sprint Plan</strong>
+              </p>
             </div>
           )}
         </Card>
