@@ -8,8 +8,6 @@ import {
   Lock,
   ArrowRight,
   Shield,
-  Sparkles,
-  CheckCircle2,
   Eye,
   EyeOff,
 } from 'lucide-react';
@@ -20,70 +18,67 @@ export const Register = () => {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState('ROLE_TEAM_MEMBER');
   const [loading, setLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
   const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+    setPasswordError('');
     setLoading(true);
     try {
-      await register(firstName, lastName, email, password, role);
+      await register(firstName, lastName, email, password, 'ROLE_TEAM_MEMBER');
       navigate('/dashboard');
     } catch (err) {
+      // Error handled by AuthContext toast
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans selection:bg-blue-500/30 selection:text-blue-400">
-      {/* Left Column - Product Marketing Branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-12 flex-col justify-between overflow-hidden border-r border-slate-800">
-        <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans selection:bg-cyan-500/30 selection:text-cyan-400">
+      {/* Left Column - Product Branding Shell */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900/50 p-12 flex-col justify-between overflow-hidden border-r border-slate-800/80">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* Top Header */}
         <div className="flex items-center gap-3 relative z-10 cursor-pointer" onClick={() => navigate('/')}>
-          <div className="p-2.5 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl text-white shadow-lg shadow-blue-500/20">
-            <Layers className="w-6 h-6" />
+          <div className="p-2.5 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-xl text-slate-950 shadow-md shadow-cyan-500/20 font-bold">
+            <Layers className="w-6 h-6 text-slate-950" />
           </div>
           <div>
-            <span className="font-extrabold text-white text-xl tracking-tight">TaskForge AI</span>
-            <span className="text-[10px] text-blue-400 font-mono block">ENTERPRISE SAAS PLATFORM</span>
+            <span className="font-bold text-white text-xl tracking-tight">TaskForge</span>
+            <span className="text-[10px] text-cyan-400 font-mono block">ENGINEERING CLARITY PLATFORM</span>
           </div>
         </div>
 
-        {/* Middle Feature List */}
-        <div className="relative z-10 space-y-6 max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-            <span>Join 50,000+ Software Engineers</span>
+        {/* Product Highlights */}
+        <div className="relative z-10 space-y-6 max-w-md">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-semibold">
+            <Shield className="w-3.5 h-3.5" />
+            <span>Developer Account Creation</span>
           </div>
 
-          <h2 className="text-3xl font-extrabold tracking-tight text-white leading-snug">
-            Create your high-velocity engineering workspace today.
+          <h2 className="text-3xl font-bold tracking-tight text-white leading-snug">
+            Join your team's high-clarity software engineering workspace.
           </h2>
 
-          <div className="space-y-3 pt-2">
-            {[
-              'Instant project setup with pre-built Kanban templates',
-              'AI backlog generator powered by LLM estimation models',
-              'Unlimited task attachments and discussion version histories',
-              'Enterprise SLA with 99.9% uptime uptime commitment',
-            ].map((text, idx) => (
-              <div key={idx} className="flex items-center gap-3 text-xs text-slate-300">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{text}</span>
-              </div>
-            ))}
-          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Create your account to manage sprint backlogs, track task progress, collaborate on code reviews, and leverage AI Mission Control.
+          </p>
         </div>
 
         {/* Footer info */}
-        <div className="relative z-10 text-xs text-slate-500 font-mono">
-          Strictly Non-Production Test Environment • TaskForge AI 2.5
+        <div className="relative z-10 text-[11px] text-slate-500 font-mono">
+          TaskForge Engineering Platform • Portfolio Demonstration
         </div>
       </div>
 
@@ -92,116 +87,70 @@ export const Register = () => {
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
+          transition={{ duration: 0.3 }}
           className="w-full max-w-md space-y-6"
         >
           <div className="space-y-2">
-            <h2 className="text-2xl font-extrabold tracking-tight text-white">Create Workspace Account</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-white">Create Account</h2>
             <p className="text-xs text-slate-400">
-              Set up your account details to start organizing project sprints.
+              Set up your details to get started with TaskForge.
             </p>
-          </div>
-
-          {/* Social OAuth Buttons */}
-          <div className="grid grid-cols-3 gap-2.5">
-            {[
-              { name: 'Google', icon: '🌐' },
-              { name: 'GitHub', icon: '💻' },
-              { name: 'LinkedIn', icon: '💼' },
-            ].map((provider) => (
-              <button
-                key={provider.name}
-                type="button"
-                className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold text-slate-300 hover:text-white transition-all flex items-center justify-center gap-2"
-              >
-                <span>{provider.icon}</span>
-                <span>{provider.name}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="relative flex items-center justify-center">
-            <div className="border-t border-slate-800 w-full" />
-            <span className="bg-slate-950 px-3 text-[10px] uppercase font-mono text-slate-500 font-bold shrink-0">
-              Or Register Details
-            </span>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   First Name
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                   <input
                     type="text"
                     required
-                    placeholder="John"
+                    placeholder="Alex"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder-slate-500 transition-all"
+                    className="w-full pl-10 pr-3 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-cyan-500 text-white placeholder-slate-500 transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Last Name
                 </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Doe"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder-slate-500 transition-all"
-                  />
-                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="Morgan"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="w-full px-3 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-cyan-500 text-white placeholder-slate-500 transition-all"
+                />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Work Email Address
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Email Address
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                 <input
                   type="email"
                   required
-                  placeholder="name@company.com"
+                  placeholder="alex@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder-slate-500 transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-cyan-500 text-white placeholder-slate-500 transition-all"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Workspace Role
-              </label>
-              <div className="relative">
-                <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white transition-all"
-                >
-                  <option value="ROLE_TEAM_MEMBER">Team Member</option>
-                  <option value="ROLE_PROJECT_MANAGER">Project Manager</option>
-                  <option value="ROLE_ADMIN">System Administrator</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Account Password
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Password
               </label>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
@@ -209,10 +158,10 @@ export const Register = () => {
                   type={showPassword ? 'text' : 'password'}
                   required
                   minLength={6}
-                  placeholder="Minimum 6 characters"
+                  placeholder="At least 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder-slate-500 transition-all"
+                  className="w-full pl-10 pr-10 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-cyan-500 text-white placeholder-slate-500 transition-all"
                 />
                 <button
                   type="button"
@@ -224,24 +173,39 @@ export const Register = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <input type="checkbox" required defaultChecked className="rounded border-slate-800 bg-slate-900 text-blue-600 focus:ring-0" />
-              <span>I agree to the Terms of Service & Privacy Policy</span>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="Re-enter password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-cyan-500 text-white placeholder-slate-500 transition-all"
+                />
+              </div>
+              {passwordError && (
+                <p className="text-[11px] text-red-400 mt-1">{passwordError}</p>
+              )}
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-cyan-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
             >
-              {loading ? 'Registering Account...' : 'Create Workspace Account'}
+              {loading ? 'Creating Account...' : 'Create Account'}
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
           <div className="text-center text-xs text-slate-400 pt-4 border-t border-slate-800/80">
-            Already registered?{' '}
-            <Link to="/login" className="font-semibold text-blue-400 hover:underline">
+            Already have an account?{' '}
+            <Link to="/login" className="font-semibold text-cyan-400 hover:underline">
               Sign In
             </Link>
           </div>

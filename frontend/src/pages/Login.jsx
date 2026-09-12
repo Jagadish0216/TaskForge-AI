@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -6,11 +6,10 @@ import {
   Mail,
   Lock,
   ArrowRight,
-  Sparkles,
-  CheckCircle2,
   Eye,
   EyeOff,
-  Star,
+  Shield,
+  UserCheck,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -19,7 +18,7 @@ export const Login = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login, googleLogin } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleAuthSuccess = (u) => {
@@ -38,187 +37,162 @@ export const Login = () => {
       const u = await login(email, password);
       handleAuthSuccess(u);
     } catch (err) {
+      // Error handled by AuthContext toast
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleSignIn = async (idToken) => {
-    setLoading(true);
-    try {
-      const u = await googleLogin(idToken);
-      handleAuthSuccess(u);
-    } catch (err) {
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    // Load Google Identity Services Script dynamically if available
-    const scriptId = 'google-gis-script';
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      document.body.appendChild(script);
-    }
-  }, []);
-
-  const triggerGoogleOAuth = () => {
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || 'mock-google-client-id.apps.googleusercontent.com',
-        callback: (response) => {
-          if (response.credential) {
-            handleGoogleSignIn(response.credential);
-          }
-        },
-      });
-      window.google.accounts.id.prompt();
-    } else {
-      // Fallback mock token generation for dev/demo environments
-      const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-      const payload = btoa(
-        JSON.stringify({
-          sub: 'google-uid-12345',
-          email: 'google.developer@taskforge.ai',
-          email_verified: true,
-          given_name: 'Google',
-          family_name: 'User',
-          picture: 'https://lh3.googleusercontent.com/a/default-user',
-        })
-      );
-      const mockIdToken = `${header}.${payload}.mock-signature`;
-      handleGoogleSignIn(mockIdToken);
-    }
+  const handleDemoPreset = (presetEmail, presetPassword) => {
+    setEmail(presetEmail);
+    setPassword(presetPassword);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans selection:bg-blue-500/30 selection:text-blue-400">
-      {/* Left Column - Product Marketing Branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-12 flex-col justify-between overflow-hidden border-r border-slate-800">
-        {/* Ambient Glow background mesh */}
-        <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-10 right-10 w-80 h-80 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans selection:bg-cyan-500/30 selection:text-cyan-400">
+      {/* Left Column - Engineering Clarity Product Shell */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-slate-900/50 p-12 flex-col justify-between overflow-hidden border-r border-slate-800/80">
+        {/* Subtle background ambient mesh */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-10 right-10 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Top Branding Header */}
+        {/* Top Brand Header */}
         <div className="flex items-center gap-3 relative z-10 cursor-pointer" onClick={() => navigate('/')}>
-          <div className="p-2.5 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl text-white shadow-lg shadow-blue-500/20">
-            <Layers className="w-6 h-6" />
+          <div className="p-2.5 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-xl text-slate-950 shadow-md shadow-cyan-500/20 font-bold">
+            <Layers className="w-6 h-6 text-slate-950" />
           </div>
           <div>
-            <span className="font-extrabold text-white text-xl tracking-tight">TaskForge AI</span>
-            <span className="text-[10px] text-blue-400 font-mono block">ENTERPRISE SAAS PLATFORM</span>
+            <span className="font-bold text-white text-xl tracking-tight">TaskForge</span>
+            <span className="text-[10px] text-cyan-400 font-mono block">ENGINEERING CLARITY PLATFORM</span>
           </div>
         </div>
 
-        {/* Middle Feature Highlights */}
-        <div className="relative z-10 space-y-6 max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-            <span>AI-Driven Workspace Synchronization</span>
+        {/* Product Positioning */}
+        <div className="relative z-10 space-y-6 max-w-md">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-semibold">
+            <Shield className="w-3.5 h-3.5" />
+            <span>Role-Based Engineering Workspace</span>
           </div>
 
-          <h2 className="text-3xl font-extrabold tracking-tight text-white leading-snug">
-            Streamline your software sprint cycles with linear accuracy.
+          <h2 className="text-3xl font-bold tracking-tight text-white leading-snug">
+            Streamlined project operations with AI-assisted sprint planning.
           </h2>
 
-          <div className="space-y-3 pt-2">
-            {[
-              'Automated sprint capacity planning and allocation',
-              'Integrated Kanban boarding and status synchronization',
-              'Executive throughput reporting with interactive charts',
-              'Zero-friction deployment tracking across environments',
-            ].map((text, idx) => (
-              <div key={idx} className="flex items-center gap-3 text-xs text-slate-300">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{text}</span>
-              </div>
-            ))}
+          <div className="space-y-3 pt-2 text-xs text-slate-300">
+            <p className="leading-relaxed">
+              TaskForge unites interactive Kanban boards, role-based access control, real-time analytics, and AI Mission Control into one cohesive workspace.
+            </p>
+          </div>
+
+          {/* Quick Demo Credentials Helper */}
+          <div className="pt-4 border-t border-slate-800/80 space-y-2.5">
+            <span className="text-[11px] font-mono uppercase text-slate-400 font-semibold block">
+              Quick Demo Login Shortcuts
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleDemoPreset('manager@demo.taskforge.local', 'demo123')}
+                className="p-2.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-lg text-left transition-all group"
+              >
+                <div className="text-xs font-semibold text-cyan-400 group-hover:text-cyan-300 flex items-center gap-1">
+                  <UserCheck className="w-3 h-3" /> Project Manager
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono truncate">manager@demo...</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDemoPreset('member@demo.taskforge.local', 'demo123')}
+                className="p-2.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-lg text-left transition-all group"
+              >
+                <div className="text-xs font-semibold text-blue-400 group-hover:text-blue-300 flex items-center gap-1">
+                  <UserCheck className="w-3 h-3" /> Team Member
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono truncate">member@demo...</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDemoPreset('admin@demo.taskforge.local', 'demo123')}
+                className="p-2.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-lg text-left transition-all group"
+              >
+                <div className="text-xs font-semibold text-purple-400 group-hover:text-purple-300 flex items-center gap-1">
+                  <UserCheck className="w-3 h-3" /> Admin
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono truncate">admin@demo...</div>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Bottom Social Proof Quote */}
-        <div className="relative z-10 p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-md space-y-2">
-          <div className="flex gap-1 text-amber-400">
-            {[...Array(5)].map((_, i) => (
-              <Star key={i} className="w-3.5 h-3.5 fill-amber-400" />
-            ))}
-          </div>
-          <p className="text-xs text-slate-300 italic">
-            "TaskForge AI reduced our sprint breakdown overhead by 70%. It is hands-down the cleanest project management tool we've used."
-          </p>
-          <p className="text-[11px] font-bold text-slate-400">— David Miller, VP of Engineering</p>
+        {/* Footer */}
+        <div className="relative z-10 text-[11px] text-slate-500 font-mono">
+          TaskForge Engineering Platform • Portfolio Demonstration
         </div>
       </div>
 
-      {/* Right Column - Split Auth Form */}
+      {/* Right Column - Clean Credentials Auth Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative">
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
+          transition={{ duration: 0.3 }}
           className="w-full max-w-md space-y-6"
         >
           {/* Header */}
           <div className="space-y-2">
-            <h2 className="text-2xl font-extrabold tracking-tight text-white">Sign In to Your Workspace</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-white">Sign In to TaskForge</h2>
             <p className="text-xs text-slate-400">
-              Welcome back! Please enter your account credentials to continue.
+              Enter your credentials to access your workspace.
             </p>
           </div>
 
-          {/* Social OAuth Buttons */}
-          <div className="grid grid-cols-3 gap-2.5">
-            <button
-              type="button"
-              onClick={triggerGoogleOAuth}
-              className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold text-slate-300 hover:text-white transition-all flex items-center justify-center gap-2"
-            >
-              <span>🌐</span>
-              <span>Google</span>
-            </button>
-            <button
-              type="button"
-              className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold text-slate-300 hover:text-white transition-all flex items-center justify-center gap-2"
-            >
-              <span>💻</span>
-              <span>GitHub</span>
-            </button>
-            <button
-              type="button"
-              className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold text-slate-300 hover:text-white transition-all flex items-center justify-center gap-2"
-            >
-              <span>💼</span>
-              <span>LinkedIn</span>
-            </button>
-          </div>
-
-          <div className="relative flex items-center justify-center">
-            <div className="border-t border-slate-800 w-full" />
-            <span className="bg-slate-950 px-3 text-[10px] uppercase font-mono text-slate-500 font-bold shrink-0">
-              Or With Email
+          {/* Quick Demo Credentials Helper for Small Screens */}
+          <div className="lg:hidden p-3 bg-slate-900/80 border border-slate-800 rounded-xl space-y-2">
+            <span className="text-[10px] font-mono uppercase text-slate-400 font-semibold block">
+              Demo Account Presets
             </span>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => handleDemoPreset('manager@demo.taskforge.local', 'demo123')}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded text-[11px] font-medium"
+              >
+                Project Manager
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoPreset('member@demo.taskforge.local', 'demo123')}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded text-[11px] font-medium"
+              >
+                Team Member
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoPreset('admin@demo.taskforge.local', 'demo123')}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-purple-400 rounded text-[11px] font-medium"
+              >
+                Admin
+              </button>
+            </div>
           </div>
 
           {/* Credentials Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Work Email Address
+                Email Address
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                 <input
                   type="email"
                   required
-                  placeholder="Enter your email address"
+                  placeholder="name@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder-slate-500 transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-cyan-500 text-white placeholder-slate-500 transition-all"
                 />
               </div>
             </div>
@@ -226,9 +200,9 @@ export const Login = () => {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-semibold text-slate-300">
-                  Account Password
+                  Password
                 </label>
-                <Link to="/forgot-password" className="text-[11px] text-blue-400 hover:underline">
+                <Link to="/forgot-password" className="text-[11px] text-cyan-400 hover:underline">
                   Forgot Password?
                 </Link>
               </div>
@@ -237,10 +211,10 @@ export const Login = () => {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  placeholder="Enter your password"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white placeholder-slate-500 transition-all"
+                  className="w-full pl-10 pr-10 py-2.5 text-xs bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-cyan-500 text-white placeholder-slate-500 transition-all"
                 />
                 <button
                   type="button"
@@ -252,27 +226,20 @@ export const Login = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" defaultChecked className="rounded border-slate-800 bg-slate-900 text-blue-600 focus:ring-0" />
-                <span>Remember this browser</span>
-              </label>
-            </div>
-
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-cyan-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
             >
-              {loading ? 'Authenticating...' : 'Sign In to Workspace'}
+              {loading ? 'Authenticating...' : 'Sign In'}
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
-          {/* Footer */}
+          {/* Registration Trigger */}
           <div className="text-center text-xs text-slate-400 pt-4 border-t border-slate-800/80">
-            Don't have an enterprise account?{' '}
-            <Link to="/register" className="font-semibold text-blue-400 hover:underline">
+            Don't have an account?{' '}
+            <Link to="/register" className="font-semibold text-cyan-400 hover:underline">
               Create Account
             </Link>
           </div>
