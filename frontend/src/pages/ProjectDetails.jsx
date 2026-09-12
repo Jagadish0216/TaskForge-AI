@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
   Folder,
   CheckSquare,
@@ -16,10 +17,11 @@ import {
   Paperclip,
   Upload,
   Download,
-  Filter,
-  Search,
-  CheckCircle,
   AlertTriangle,
+  ChevronRight,
+  ShieldAlert,
+  CheckCircle,
+  Check,
 } from 'lucide-react';
 import { projectService, taskService, aiService, attachmentService, activityService } from '../services/services';
 import Badge from '../components/common/Badge';
@@ -97,7 +99,7 @@ export const ProjectDetails = () => {
 
     const previousStatus = taskToUpdate.status;
 
-    // 1. Optimistic UI update
+    // Optimistic UI update
     setTasks((prevTasks) =>
       prevTasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
     );
@@ -115,11 +117,9 @@ export const ProjectDetails = () => {
     };
 
     try {
-      // 2. Call backend status update API
       await taskService.updateTask(taskId, payload);
       toast.success(`Moved task to ${newStatus.replace('_', ' ')}`);
     } catch (err) {
-      // 3. Rollback to previous status on error
       setTasks((prevTasks) =>
         prevTasks.map((t) => (t.id === taskId ? { ...t, status: previousStatus } : t))
       );
@@ -211,12 +211,10 @@ export const ProjectDetails = () => {
     const isGlobalPM = user.role === 'ROLE_PROJECT_MANAGER' || user.roles?.includes('ROLE_PROJECT_MANAGER');
     if (isGlobalAdmin || isGlobalPM) return true;
 
-    // Check project owner:
     if (project && (project.owner?.id === user.id || project.ownerId === user.id)) {
       return true;
     }
 
-    // Check project member role (OWNER or MANAGER):
     const currentMemberRecord = members.find(m => (m.user?.id === user.id || m.userId === user.id));
     if (currentMemberRecord && (currentMemberRecord.role === 'OWNER' || currentMemberRecord.role === 'MANAGER')) {
       return true;
@@ -228,156 +226,409 @@ export const ProjectDetails = () => {
   if (loading) return <LoadingSpinner fullScreen />;
   if (!project) return null;
 
-  return (
-    <div className="space-y-6">
-      {/* Workspace Header */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white rounded-2xl shadow-md">
-              <Folder className="w-7 h-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 text-xs font-bold font-mono bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded border border-blue-200 dark:border-blue-900">
-                  {project.projectKey || project.key}
-                </span>
-                <Badge type="projectStatus" value={project.status || 'IN_PROGRESS'} />
-                <Badge type="priority" value={project.priority || 'MEDIUM'} />
-              </div>
-              <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 tracking-tight">
-                {project.name}
-              </h1>
-            </div>
-          </div>
+  // Real Telemetry Calculations
+  const totalTasksCount = tasks.length;
+  const completedTasksCount = tasks.filter((t) => t.status === 'DONE').length;
+  const activeTasksCount = tasks.filter((t) => t.status !== 'DONE').length;
+  const completionRate = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
+  const overdueTasks = tasks.filter((t) => t.status !== 'DONE' && t.dueDate && new Date(t.dueDate) < new Date());
+  const overdueTasksCount = overdueTasks.length;
 
+  // Upcoming priority work sorted by Overdue first, then Urgent/High, then Due Date
+  const upcomingDeliverables = [...tasks]
+    .filter((t) => t.status !== 'DONE')
+    .sort((a, b) => {
+      const aOverdue = a.dueDate && new Date(a.dueDate) < new Date() ? 1 : 0;
+      const bOverdue = b.dueDate && new Date(b.dueDate) < new Date() ? 1 : 0;
+      if (aOverdue !== bOverdue) return bOverdue - aOverdue;
+      const priorityOrder = { URGENT: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+      return (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0);
+    })
+    .slice(0, 4);
+
+  // Avatar Stack Configuration
+  const maxVisibleAvatars = 4;
+  const visibleMembers = members.slice(0, maxVisibleAvatars);
+  const overflowMemberCount = Math.max(0, members.length - maxVisibleAvatars);
+
+  return (
+    <div className="space-y-6 font-sans pb-8">
+      {/* 1. Low-Profile Engineering Workspace Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800/80">
+        <div className="flex items-start md:items-center gap-3">
+          <div className="p-2.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl shrink-0">
+            <Folder className="w-6 h-6" />
+          </div>
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2 py-0.5 text-xs font-mono font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 rounded border border-blue-200 dark:border-blue-900">
+                {project.projectKey || project.key}
+              </span>
+              <Badge type="projectStatus" value={project.status || 'IN_PROGRESS'} />
+              <Badge type="priority" value={project.priority || 'MEDIUM'} />
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight truncate">
+              {project.name}
+            </h1>
+          </div>
+        </div>
+
+        {/* Header Right Controls: Team Avatar Stack + Primary Actions */}
+        <div className="flex items-center gap-3 flex-wrap justify-between md:justify-end shrink-0">
+          {/* Team Avatar Stack */}
+          {members.length > 0 && (
+            <div className="flex items-center -space-x-2 overflow-hidden py-1 pr-1" title="Project Team Members">
+              {visibleMembers.map((m) => {
+                const u = m.user || m;
+                const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+                return u.avatarUrl ? (
+                  <img
+                    key={m.id}
+                    src={getAvatarUrl(u.avatarUrl)}
+                    alt={name}
+                    title={`${name} (${m.role || 'MEMBER'})`}
+                    className="w-7 h-7 rounded-full border-2 border-white dark:border-slate-900 object-cover shrink-0"
+                  />
+                ) : (
+                  <div
+                    key={m.id}
+                    title={`${name} (${m.role || 'MEMBER'})`}
+                    className="w-7 h-7 rounded-full border-2 border-white dark:border-slate-900 bg-blue-100 dark:bg-slate-800 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-[10px] uppercase shrink-0"
+                  >
+                    {getInitials(name)}
+                  </div>
+                );
+              })}
+              {overflowMemberCount > 0 && (
+                <div
+                  title={`${overflowMemberCount} more team members`}
+                  className="w-7 h-7 rounded-full border-2 border-white dark:border-slate-900 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-bold text-[10px] flex items-center justify-center shrink-0"
+                >
+                  +{overflowMemberCount}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action Buttons */}
           <div className="flex items-center gap-2">
             {canManageMembers() && (
               <button
+                type="button"
                 onClick={() => setShowInviteModal(true)}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                <UserPlus className="w-4 h-4" /> Add Member
+                <UserPlus className="w-3.5 h-3.5" /> Add Member
               </button>
             )}
-            {canManageMembers() && (
-              <button
-                onClick={() => setShowTaskModal(true)}
-                className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-md hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" /> Create Task
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowTaskModal(true)}
+              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> Create Task
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* 8 Workspace Tabs Navigation */}
-        <div className="flex items-center gap-1.5 border-t border-slate-100 dark:border-slate-800/80 pt-4 pt-4 overflow-x-auto scrollbar-none">
-          {[
-            { key: 'overview', label: 'Overview', icon: Folder },
-            { key: 'board', label: 'Kanban Board', icon: CheckSquare },
-            { key: 'list', label: `List View (${tasks.length})`, icon: FileText },
-            { key: 'timeline', label: 'Timeline', icon: Clock },
-            { key: 'calendar', label: 'Calendar', icon: CalendarIcon },
-            { key: 'files', label: `Files (${attachments.length})`, icon: Paperclip },
-            { key: 'activity', label: 'Audit Activity', icon: Activity },
-            { key: 'ai', label: 'AI Insights Co-Pilot', icon: Sparkles },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-3.5 py-2 text-xs font-medium rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                  activeTab === tab.key
-                    ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-500/20'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      {/* 3. Streamlined Workspace Tabs Navigation (Preserves All 8 Tabs) */}
+      <div className="flex items-center gap-1 overflow-x-auto scrollbar-none border-b border-slate-200/80 dark:border-slate-800/80 pb-2">
+        {[
+          { key: 'overview', label: 'Overview', icon: Folder },
+          { key: 'board', label: 'Kanban Board', icon: CheckSquare },
+          { key: 'list', label: `List View (${tasks.length})`, icon: FileText },
+          { key: 'timeline', label: 'Timeline', icon: Clock },
+          { key: 'calendar', label: 'Calendar', icon: CalendarIcon },
+          { key: 'files', label: `Files (${attachments.length})`, icon: Paperclip },
+          { key: 'activity', label: 'Audit Activity', icon: Activity },
+          { key: 'ai', label: 'AI Insights Co-Pilot', icon: Sparkles },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                isActive
+                  ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 space-y-4">
-            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm uppercase tracking-wider pb-2 border-b border-slate-100 dark:border-slate-800">Project Scope Description</h3>
-            <p className="text-xs text-slate-655 dark:text-slate-350 leading-relaxed whitespace-pre-wrap">
-              {project.description || 'No detailed project description provided.'}
-            </p>
-          </Card>
-
-          <div className="space-y-6">
-            <Card className="space-y-4">
-              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm uppercase tracking-wider pb-2 border-b border-slate-100 dark:border-slate-800">Workspace Metadata</h3>
-              <div className="space-y-2.5 text-xs">
-                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-slate-500">Project Key:</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{project.projectKey || project.key}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-slate-500">Visibility Flag:</span>
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{project.visibility || 'PUBLIC'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-slate-500">Created Timestamp:</span>
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{formatDate(project.createdAt)}</span>
+        <div className="space-y-6">
+          {/* 4. Real Project Telemetry Ribbon */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 flex items-center gap-3">
+              <div className="p-2 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg">
+                <CheckCircle className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">
+                  Completion Rate
+                </p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
+                    {completionRate}%
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">({completedTasksCount}/{totalTasksCount})</span>
                 </div>
               </div>
-            </Card>
+            </div>
 
-            <Card className="space-y-4">
-              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm uppercase tracking-wider pb-2 border-b border-slate-100 dark:border-slate-800">Project Team Members</h3>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {members.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-3 text-center">No team members assigned.</p>
-                ) : (
-                  members.map((m) => {
-                    const u = m.user || m;
-                    const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
-                    return (
-                      <div key={m.id} className="flex items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-805 rounded-xl text-xs">
-                        <div className="flex items-center gap-2 min-w-0">
-                          {u.avatarUrl ? (
-                            <img
-                              src={getAvatarUrl(u.avatarUrl)}
-                              alt="Avatar"
-                              className="w-7 h-7 rounded-full object-cover shrink-0"
-                            />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 dark:bg-slate-800 dark:text-blue-400 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
-                              {getInitials(name)}
+            <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 flex items-center gap-3">
+              <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                <CheckSquare className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">
+                  Active Backlog
+                </p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
+                    {activeTasksCount}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">tasks queued</span>
+                </div>
+              </div>
+            </div>
+
+            <div className={`p-3.5 rounded-xl border flex items-center gap-3 ${
+              overdueTasksCount > 0
+                ? 'border-rose-500/30 bg-rose-500/5 dark:bg-rose-950/20'
+                : 'border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50'
+            }`}>
+              <div className={`p-2 rounded-lg ${
+                overdueTasksCount > 0
+                  ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              }`}>
+                {overdueTasksCount > 0 ? <ShieldAlert className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+              </div>
+              <div>
+                <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">
+                  Overdue Blockers
+                </p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-lg font-extrabold ${
+                    overdueTasksCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'
+                  }`}>
+                    {overdueTasksCount}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {overdueTasksCount > 0 ? 'requires action' : 'clean timeline'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 flex items-center gap-3">
+              <div className="p-2 bg-teal-500/10 text-teal-600 dark:text-teal-400 rounded-lg">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider">
+                  Team Members
+                </p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
+                    {members.length}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">assigned</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. Overview Grid Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left 2 Columns: Scope Description & Upcoming Deliverables */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Project Scope Description */}
+              <div className="p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xs uppercase tracking-wider">
+                    Project Scope & Description
+                  </h3>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    Created: {formatDate(project.createdAt)}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                  {project.description || 'No detailed project scope description provided.'}
+                </p>
+              </div>
+
+              {/* 6. Upcoming Priority Deliverables */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                      Upcoming Priority Deliverables
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('board')}
+                    className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    Open Kanban Board <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {upcomingDeliverables.length === 0 ? (
+                    <div className="p-6 text-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+                      <p className="text-xs text-slate-400">No active deliverables queued</p>
+                    </div>
+                  ) : (
+                    upcomingDeliverables.map((t) => {
+                      const isOverdue = t.dueDate && new Date(t.dueDate) < new Date();
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => setSelectedTaskId(t.id)}
+                          className={`p-3.5 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
+                            isOverdue
+                              ? 'border-rose-500/30 bg-rose-500/5 dark:bg-rose-950/10 hover:border-rose-500/50'
+                              : 'border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 hover:border-blue-500/40'
+                          }`}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge type="priority" value={t.priority} />
+                              <Badge type="status" value={t.status} />
+                              {isOverdue && (
+                                <span className="px-1.5 py-0.5 text-[9px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 rounded font-mono">
+                                  OVERDUE
+                                </span>
+                              )}
                             </div>
-                          )}
-                          <div className="text-left truncate">
-                            <span className="font-semibold text-slate-900 dark:text-slate-100 block truncate">{name}</span>
-                            <span className="text-[10px] text-slate-400 block truncate">{u.email}</span>
-                            <span className="px-1.5 py-0.5 mt-0.5 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-300 text-[9px] font-bold rounded inline-block">
-                              {m.role || 'MEMBER'}
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                              {t.title}
+                            </h4>
+                            <span className="text-[10px] text-slate-400 font-mono block">
+                              Due: {t.dueDate ? formatDate(t.dueDate) : 'No deadline set'}
                             </span>
                           </div>
+                          <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                         </div>
-                        {canManageMembers() && m.role !== 'OWNER' && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveMember(m.id, name)}
-                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full shrink-0"
-                            title="Remove Member"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </Card>
+            </div>
+
+            {/* Right Column: Team Roster & AI Summary */}
+            <div className="space-y-6">
+              {/* 8. Team Roster Panel */}
+              <div className="p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xs uppercase tracking-wider">
+                      Project Team Roster ({members.length})
+                    </h3>
+                  </div>
+                  {canManageMembers() && (
+                    <button
+                      type="button"
+                      onClick={() => setShowInviteModal(true)}
+                      className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1 scrollbar-thin">
+                  {members.length === 0 ? (
+                    <p className="text-xs text-slate-400 py-4 text-center">No team members assigned</p>
+                  ) : (
+                    members.map((m) => {
+                      const u = m.user || m;
+                      const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+                      return (
+                        <div
+                          key={m.id}
+                          className="flex items-center justify-between gap-2 p-2 bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 rounded-lg text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {u.avatarUrl ? (
+                              <img
+                                src={getAvatarUrl(u.avatarUrl)}
+                                alt={name}
+                                className="w-7 h-7 rounded-full object-cover shrink-0"
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 dark:bg-slate-800 dark:text-blue-300 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
+                                {getInitials(name)}
+                              </div>
+                            )}
+                            <div className="text-left truncate">
+                              <span className="font-semibold text-slate-900 dark:text-slate-100 block truncate leading-tight">
+                                {name}
+                              </span>
+                              <span className="text-[10px] text-slate-400 block truncate">{u.email}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-300 text-[9px] font-mono font-bold rounded">
+                              {m.role || 'MEMBER'}
+                            </span>
+                            {canManageMembers() && m.role !== 'OWNER' && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMember(m.id, name)}
+                                className="p-1 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors cursor-pointer"
+                                title="Remove Member"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* AI Workspace Quick Insight */}
+              <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-950/10 dark:bg-cyan-950/20 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />
+                    <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xs">
+                      AI Project Health Summary
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ai')}
+                    className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    Open Co-Pilot
+                  </button>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
+                  Project is at <span className="text-emerald-600 dark:text-emerald-400 font-bold">{completionRate}% completion</span> with {activeTasksCount} active backlog tasks and {overdueTasksCount} overdue risk factors.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
