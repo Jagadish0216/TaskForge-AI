@@ -105,7 +105,8 @@ public class AIService {
                 request.technologyStack()
         );
 
-        log.info("\n================ GEMINI NEW PROJECT PROMPT ================\n{}\n===========================================================", prompt);
+        log.info("AI request received: PROJECT_GENERATE");
+        log.debug("Gemini project generation prompt: {}", prompt);
 
         validateNewProjectPrompt(prompt);
 
@@ -190,9 +191,9 @@ public class AIService {
                             } catch (Exception ignored) {}
                         }
 
-                        // Log task details before saving
-                        log.info("Task:\nTitle: {}\nPriority: {}\nStatus: {}\nProjectId: {}\nAssigneeId: {}",
-                                title, priority, TaskStatus.TODO, savedProject.getId(), (defaultUser != null ? defaultUser.getId() : "null"));
+                        // Log task details at DEBUG level
+                        log.debug("Task created: [{}] Priority: {} Status: {} ProjectId: {}",
+                                title, priority, TaskStatus.TODO, savedProject.getId());
 
                         Task task = Task.builder()
                                 .title(title)
@@ -230,7 +231,7 @@ public class AIService {
     @Transactional
     public AIResponse chat(ChatRequest request) {
         AIIntent intent = intentDetector.detectIntent(request.message());
-        log.info("Detected intent for user prompt standard chat: {}", intent);
+        log.info("AI request received: CHAT ({})", intent);
 
         switch (intent) {
             case NEW_PROJECT -> {

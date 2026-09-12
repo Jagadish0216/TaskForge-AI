@@ -130,7 +130,7 @@ public class GeminiProvider {
                     activeModel, apiKey.trim()
             );
 
-            log.info("Using model: {}", activeModel);
+            log.debug("Using model: {}", activeModel);
 
             int attempts = 0;
             long currentDelay = Math.max(initialDelayMs, 1000L);
@@ -149,7 +149,8 @@ public class GeminiProvider {
                         if (candidatesNode.isArray() && candidatesNode.size() > 0) {
                             JsonNode textNode = candidatesNode.get(0).path("content").path("parts").get(0).path("text");
                             String responseText = textNode.asText("");
-                            log.info("Success! Latency: {} ms (model: {})", latency, activeModel);
+                            log.info("Gemini generation completed successfully");
+                            log.debug("Success! Latency: {} ms (model: {})", latency, activeModel);
                             if (requireJson) {
                                 return sanitizeJsonText(responseText);
                             }
@@ -163,20 +164,17 @@ public class GeminiProvider {
                     long latency = System.currentTimeMillis() - startTime;
                     HttpStatusCode status = ex.getStatusCode();
                     String responseBody = ex.getResponseBodyAsString();
-                    HttpHeaders responseHeaders = ex.getResponseHeaders();
 
                     lastStatusCode = status.value();
                     lastErrorMessage = responseBody;
 
                     log.error("Gemini API Error -> HTTP {} received on Attempt {} for model {}", status.value(), attempts, activeModel);
-                    log.error("Endpoint: {}, Latency: {} ms", redactedUrl, latency);
-                    log.error("Response Headers: {}", responseHeaders);
-                    log.error("Response Body: {}", responseBody);
+                    log.debug("Endpoint: {}, Latency: {} ms, Response: {}", redactedUrl, latency, responseBody);
 
                     boolean isRetryable = status.value() == 429 || status.value() == 500 || status.value() == 502 || status.value() == 503 || status.value() == 504;
 
                     if (isRetryable && attempts < maxAttempts) {
-                        log.warn("Retry {} (waiting {}ms)...", attempts, currentDelay);
+                        log.warn("Gemini request failed (HTTP {}); retrying attempt {}/{}...", status.value(), attempts, maxAttempts);
                         sleep(currentDelay);
                         currentDelay *= 2; // Exponential backoff (1s -> 2s -> 4s)
                         continue;
@@ -195,10 +193,10 @@ public class GeminiProvider {
                 } catch (ResourceAccessException ex) {
                     long latency = System.currentTimeMillis() - startTime;
                     log.error("Gemini Network / Timeout Error on Attempt {} for model {}: {}", attempts, activeModel, ex.getMessage());
-                    log.error("Endpoint: {}, Latency: {} ms", redactedUrl, latency);
+                    log.debug("Endpoint: {}, Latency: {} ms", redactedUrl, latency);
 
                     if (attempts < maxAttempts) {
-                        log.warn("Retry {} (waiting {}ms)...", attempts, currentDelay);
+                        log.warn("Gemini network request failed; retrying attempt {}/{}...", attempts, maxAttempts);
                         sleep(currentDelay);
                         currentDelay *= 2;
                         continue;
@@ -228,7 +226,7 @@ public class GeminiProvider {
         }
 
         // All models failed! Throw specific, user-friendly exception based on cause
-        log.error("All configured Gemini models failed. Last status code: {}", lastStatusCode);
+        log.error("Gemini request failed after retry exhaustion. Last status code: {}", lastStatusCode);
 
         if (lastStatusCode == 401 || lastStatusCode == 403 || (lastStatusCode == 400 && lastErrorMessage != null && lastErrorMessage.contains("API_KEY_INVALID"))) {
             throw new InvalidStateException("Gemini API key is invalid or not authorized. Please set a valid GEMINI_API_KEY environment variable.");

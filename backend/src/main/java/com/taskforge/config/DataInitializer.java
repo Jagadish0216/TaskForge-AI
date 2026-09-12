@@ -81,11 +81,11 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        log.info("Initializing baseline system roles...");
+        log.info("System roles initialized.");
         Map<UserRole, Role> roleMap = initRoles();
 
         if (!seedDemoData && !resetDemoData) {
-            log.info("Demo data seeding and reset are disabled via configuration.");
+            log.info("Demo data seeding disabled.");
             return;
         }
 
@@ -100,7 +100,7 @@ public class DataInitializer implements CommandLineRunner {
 
         log.info("Seeding clean, canonical portfolio demonstration dataset...");
         seedDataset(roleMap);
-        log.info("Demo dataset initialization completed: 3 users, 1 project (PULSE), 10 tasks.");
+        log.info("Demo dataset initialized: 3 users, 1 project (PULSE), 10 tasks.");
     }
 
     private boolean isDatasetInitialized() {
