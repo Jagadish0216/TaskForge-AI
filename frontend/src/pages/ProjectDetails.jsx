@@ -92,25 +92,39 @@ export const ProjectDetails = () => {
   };
 
   const handleStatusChange = async (taskId, newStatus) => {
+    const taskToUpdate = tasks.find((t) => t.id === taskId);
+    if (!taskToUpdate || taskToUpdate.status === newStatus) return;
+
+    const previousStatus = taskToUpdate.status;
+
+    // 1. Optimistic UI update
+    setTasks((prevTasks) =>
+      prevTasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+    );
+
+    const payload = {
+      title: taskToUpdate.title,
+      description: taskToUpdate.description || '',
+      status: newStatus,
+      priority: taskToUpdate.priority || 'MEDIUM',
+      assigneeId: taskToUpdate.assigneeId || taskToUpdate.assignee?.id || null,
+      startDate: taskToUpdate.startDate || null,
+      dueDate: taskToUpdate.dueDate || null,
+      estimatedHours: taskToUpdate.estimatedHours || null,
+      actualHours: taskToUpdate.actualHours || null,
+    };
+
     try {
-      const taskToUpdate = tasks.find((t) => t.id === taskId);
-      if (!taskToUpdate) return;
-      const payload = {
-        title: taskToUpdate.title,
-        description: taskToUpdate.description || '',
-        status: newStatus,
-        priority: taskToUpdate.priority || 'MEDIUM',
-        assigneeId: taskToUpdate.assigneeId || taskToUpdate.assignee?.id || null,
-        startDate: taskToUpdate.startDate || null,
-        dueDate: taskToUpdate.dueDate || null,
-        estimatedHours: taskToUpdate.estimatedHours || null,
-        actualHours: taskToUpdate.actualHours || null,
-      };
+      // 2. Call backend status update API
       await taskService.updateTask(taskId, payload);
-      toast.success('Task status updated');
-      fetchProjectData();
+      toast.success(`Moved task to ${newStatus.replace('_', ' ')}`);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update task status');
+      // 3. Rollback to previous status on error
+      setTasks((prevTasks) =>
+        prevTasks.map((t) => (t.id === taskId ? { ...t, status: previousStatus } : t))
+      );
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to update task status';
+      toast.error(errorMessage);
     }
   };
 
@@ -370,7 +384,7 @@ export const ProjectDetails = () => {
 
       {/* TAB 2: BOARD */}
       {activeTab === 'board' && (
-        <KanbanBoard tasks={tasks} onStatusChange={handleStatusChange} />
+        <KanbanBoard tasks={tasks} onTaskClick={(t) => setSelectedTaskId(t.id)} onStatusChange={handleStatusChange} />
       )}
 
       {/* TAB 3: LIST VIEW */}

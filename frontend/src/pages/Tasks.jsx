@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import TaskCard from '../components/tasks/TaskCard';
 import KanbanBoard from '../components/tasks/KanbanBoard';
 import TaskModal from '../components/tasks/TaskModal';
+import TaskDetailsDrawer from '../components/tasks/TaskDetailsDrawer';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 import toast from 'react-hot-toast';
@@ -29,6 +30,7 @@ export const Tasks = () => {
   const [showAllTasks, setShowAllTasks] = useState(false);
 
   const [modalState, setModalState] = useState({ open: false, task: null });
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
 
   useEffect(() => {
     fetchInitialData();
@@ -74,25 +76,39 @@ export const Tasks = () => {
   };
 
   const handleStatusChange = async (taskId, newStatus) => {
+    const taskToUpdate = tasks.find((t) => t.id === taskId);
+    if (!taskToUpdate || taskToUpdate.status === newStatus) return;
+
+    const previousStatus = taskToUpdate.status;
+
+    // 1. Optimistic UI update
+    setTasks((prevTasks) =>
+      prevTasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+    );
+
+    const payload = {
+      title: taskToUpdate.title,
+      description: taskToUpdate.description || '',
+      status: newStatus,
+      priority: taskToUpdate.priority || 'MEDIUM',
+      assigneeId: taskToUpdate.assigneeId || taskToUpdate.assignee?.id || null,
+      startDate: taskToUpdate.startDate || null,
+      dueDate: taskToUpdate.dueDate || null,
+      estimatedHours: taskToUpdate.estimatedHours || null,
+      actualHours: taskToUpdate.actualHours || null,
+    };
+
     try {
-      const taskToUpdate = tasks.find((t) => t.id === taskId);
-      if (!taskToUpdate) return;
-      const payload = {
-        title: taskToUpdate.title,
-        description: taskToUpdate.description || '',
-        status: newStatus,
-        priority: taskToUpdate.priority || 'MEDIUM',
-        assigneeId: taskToUpdate.assigneeId || taskToUpdate.assignee?.id || null,
-        startDate: taskToUpdate.startDate || null,
-        dueDate: taskToUpdate.dueDate || null,
-        estimatedHours: taskToUpdate.estimatedHours || null,
-        actualHours: taskToUpdate.actualHours || null,
-      };
+      // 2. Call backend status update API
       await taskService.updateTask(taskId, payload);
-      toast.success('Task status updated');
-      fetchInitialData();
+      toast.success(`Moved task to ${newStatus.replace('_', ' ')}`);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update task status');
+      // 3. Rollback to previous status on error
+      setTasks((prevTasks) =>
+        prevTasks.map((t) => (t.id === taskId ? { ...t, status: previousStatus } : t))
+      );
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to update task status';
+      toast.error(errorMessage);
     }
   };
 
@@ -273,6 +289,7 @@ export const Tasks = () => {
             className="px-3 py-2 text-xs font-medium border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 focus:outline-none"
           >
             <option value="ALL">All Statuses</option>
+            <option value="BACKLOG">Backlog</option>
             <option value="TODO">To Do</option>
             <option value="IN_PROGRESS">In Progress</option>
             <option value="IN_REVIEW">In Review</option>
@@ -311,6 +328,7 @@ export const Tasks = () => {
       ) : viewMode === 'kanban' ? (
         <KanbanBoard
           tasks={filteredTasks}
+          onTaskClick={(t) => setSelectedTaskId(t.id)}
           onEditTask={(t) => setModalState({ open: true, task: t })}
           onDeleteTask={handleDelete}
           onStatusChange={handleStatusChange}
@@ -321,6 +339,7 @@ export const Tasks = () => {
             <TaskCard
               key={task.id}
               task={task}
+              onClick={(t) => setSelectedTaskId(t.id)}
               onEdit={(t) => setModalState({ open: true, task: t })}
               onDelete={handleDelete}
             />
@@ -328,13 +347,21 @@ export const Tasks = () => {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Create / Edit Modal */}
       <TaskModal
         isOpen={modalState.open}
         onClose={() => setModalState({ open: false, task: null })}
         onSubmit={handleCreateOrUpdate}
         task={modalState.task}
         projects={projects}
+      />
+
+      {/* Details Drawer */}
+      <TaskDetailsDrawer
+        taskId={selectedTaskId}
+        isOpen={!!selectedTaskId}
+        onClose={() => setSelectedTaskId(null)}
+        onTaskUpdated={fetchInitialData}
       />
     </div>
   );
