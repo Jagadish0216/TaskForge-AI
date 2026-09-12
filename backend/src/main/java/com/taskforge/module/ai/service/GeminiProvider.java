@@ -40,10 +40,10 @@ public class GeminiProvider {
     @Value("${gemini.api.key:}")
     private String apiKey;
 
-    @Value("${gemini.model:gemini-3.5-flash}")
+    @Value("${gemini.model:gemini-3.8-flash}")
     private String defaultModel;
 
-    @Value("${gemini.models:gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.5-nano}")
+    @Value("${gemini.models:gemini-3.8-flash,gemini-3.7-flash,gemini-3.5-flash-lite}")
     private String configuredModelsString;
 
     @Value("${gemini.retry.maxAttempts:3}")
@@ -82,18 +82,18 @@ public class GeminiProvider {
             if (StringUtils.hasText(defaultModel)) {
                 fallbackModelsList.add(defaultModel.trim());
             }
+            fallbackModelsList.add("gemini-3.7-flash");
             fallbackModelsList.add("gemini-3.5-flash-lite");
-            fallbackModelsList.add("gemini-3.5-nano");
         }
 
         log.info("Gemini Provider initialized successfully");
         log.info("Configured Fallback Models: {}", fallbackModelsList);
         log.info("Max Retries Per Model: {}, Initial Delay: {}ms", maxAttempts, initialDelayMs);
         log.info("Connect Timeout: {}ms, Read Timeout: {}ms", connectTimeoutMs, readTimeoutMs);
-        if (StringUtils.hasText(apiKey)) {
+        if (StringUtils.hasText(apiKey) && !"mock-key".equalsIgnoreCase(apiKey.trim())) {
             log.info("API Key: Loaded Successfully");
         } else {
-            log.warn("API Key: Missing or Not Configured");
+            log.warn("API Key: Missing or Not Configured (using default/mock value)");
         }
     }
 
@@ -116,6 +116,8 @@ public class GeminiProvider {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
         int totalModels = fallbackModelsList.size();
+        int lastStatusCode = 0;
+        String lastErrorMessage = null;
 
         for (int mIndex = 0; mIndex < totalModels; mIndex++) {
             String activeModel = fallbackModelsList.get(mIndex);
@@ -163,6 +165,9 @@ public class GeminiProvider {
                     String responseBody = ex.getResponseBodyAsString();
                     HttpHeaders responseHeaders = ex.getResponseHeaders();
 
+                    lastStatusCode = status.value();
+                    lastErrorMessage = responseBody;
+
                     log.error("Gemini API Error -> HTTP {} received on Attempt {} for model {}", status.value(), attempts, activeModel);
                     log.error("Endpoint: {}, Latency: {} ms", redactedUrl, latency);
                     log.error("Response Headers: {}", responseHeaders);
@@ -175,6 +180,12 @@ public class GeminiProvider {
                         sleep(currentDelay);
                         currentDelay *= 2; // Exponential backoff (1s -> 2s -> 4s)
                         continue;
+                    }
+
+                    // For non-retryable authentication / authorization failures, break model loop immediately
+                    if (status.value() == 401 || status.value() == 403 || (status.value() == 400 && responseBody != null && responseBody.contains("API_KEY_INVALID"))) {
+                        log.error("Non-retryable authentication error (HTTP {}) received from Gemini API.", status.value());
+                        break;
                     }
 
                     // Non-retryable status or retries exhausted for this model
@@ -204,6 +215,11 @@ public class GeminiProvider {
                 }
             }
 
+            // Stop model fallback iteration if we hit a permanent authentication failure
+            if (lastStatusCode == 401 || lastStatusCode == 403 || (lastStatusCode == 400 && lastErrorMessage != null && lastErrorMessage.contains("API_KEY_INVALID"))) {
+                break;
+            }
+
             // If current activeModel failed after maxAttempts or non-retryable error, log model switch
             if (mIndex < totalModels - 1) {
                 String nextModel = fallbackModelsList.get(mIndex + 1);
@@ -211,14 +227,23 @@ public class GeminiProvider {
             }
         }
 
-        // All models failed! Return clean, friendly user-facing exception
-        log.error("All configured Gemini models failed after retries and fallbacks.");
+        // All models failed! Throw specific, user-friendly exception based on cause
+        log.error("All configured Gemini models failed. Last status code: {}", lastStatusCode);
+
+        if (lastStatusCode == 401 || lastStatusCode == 403 || (lastStatusCode == 400 && lastErrorMessage != null && lastErrorMessage.contains("API_KEY_INVALID"))) {
+            throw new InvalidStateException("Gemini API key is invalid or not authorized. Please set a valid GEMINI_API_KEY environment variable.");
+        } else if (lastStatusCode == 400 || lastStatusCode == 404) {
+            throw new InvalidStateException("Gemini API request failed due to invalid model configuration or request format (HTTP " + lastStatusCode + ").");
+        } else if (lastStatusCode == 429) {
+            throw new InvalidStateException("Google Gemini rate limit exceeded. Please try again in a few moments.");
+        }
+
         throw new InvalidStateException("Google Gemini is temporarily busy. Please try again in a few moments.");
     }
 
     private void validateRequest(String prompt) {
-        if (!StringUtils.hasText(apiKey)) {
-            log.error("Gemini Request Validation Failed: API key missing");
+        if (!StringUtils.hasText(apiKey) || "mock-key".equalsIgnoreCase(apiKey.trim())) {
+            log.error("Gemini Request Validation Failed: API key is missing or set to placeholder 'mock-key'");
             throw new InvalidStateException("Gemini API key is not configured. Please set GEMINI_API_KEY environment variable or application property.");
         }
         if (!StringUtils.hasText(prompt)) {
